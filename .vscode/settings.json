@@ -1,0 +1,19 @@
+{
+  "python.languageServer": "Pylance",
+  "python.analysis.typeCheckingMode": "off",
+
+  "prettier.enable": true,
+  "prettier.singleQuote": true,
+  "prettier.arrowParens": "always",
+  "prettier.printWidth": 80,
+  "prettier.tabWidth": 2,
+  "prettier.semi": false,
+  "python.analysis.autoImportCompletions": true,
+  "i18n-ally.localesPaths": ["react/src/i18n/locales"],
+  "i18n-ally.enabledFrameworks": ["react-i18next"],
+  "i18n-ally.keystyle": "nested",
+  "i18n-ally.namespace": true,
+  "i18n-ally.pathMatcher": "{locale}/{namespaces}.json",
+  "i18n-ally.displayLanguage": "zh-CN",
+  "i18n-ally.sourceLanguage": "en"
+}

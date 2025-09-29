@@ -1,0 +1,60 @@
+# Example configuration file for using DynamoDB as primary database
+# Copy this to user_data/config.toml and modify as needed
+
+# Database configuration
+[database]
+type = "dynamodb"  # Use "sqlite" for SQLite, "dynamodb" for DynamoDB
+
+[database.sqlite]
+# SQLite configuration (used as backup when DynamoDB is primary)
+# path = "/custom/path/to/database.db"  # Optional: custom path, uses default if not specified
+
+[database.dynamodb]
+region = "us-west-2"  # AWS region where DynamoDB tables are located
+
+# LLM Provider configurations
+[anthropic]
+models = { "claude-3-7-sonnet-latest" = { type = "text" } }
+url = "https://api.anthropic.com/v1/"
+api_key = "your-anthropic-api-key"
+max_tokens = 8192
+
+[openai]
+models = { 
+    "gpt-4o" = { type = "text" }, 
+    "gpt-4o-mini" = { type = "text" },
+    "gpt-image-1" = { type = "image" }
+}
+url = "https://api.openai.com/v1/"
+api_key = "your-openai-api-key"
+max_tokens = 8192
+
+[bedrock]
+models = {
+    "us.anthropic.claude-3-7-sonnet-20250219-v1:0" = { type = "text" },
+    "us.anthropic.claude-3-5-sonnet-20241022-v2:0" = { type = "text" },
+    "us.anthropic.claude-3-5-haiku-20241022-v1:0" = { type = "text" }
+}
+url = ""
+api_key = ""  # Not needed for Bedrock - uses AWS credentials
+max_tokens = 8192
+region = "us-west-2"
+
+[siliconflow]
+models = {
+    "deepseek-ai/DeepSeek-V3" = { type = "text" }
+}
+url = "https://api.siliconflow.cn/v1/"
+api_key = "your-siliconflow-api-key"
+max_tokens = 8192
+
+[comfyui]
+models = {
+    "flux-kontext" = { type = "comfyui", media_type = "image" },
+    "qwen-image-multiple" = { type = "comfyui", media_type = "image" },
+    "flux-t2i" = { type = "comfyui", media_type = "image" },
+    "wan-t2v" = { type = "comfyui", media_type = "video" },
+    "wan-i2v" = { type = "comfyui", media_type = "video" }
+}
+url = "http://ec2-34-216-22-132.us-west-2.compute.amazonaws.com:8188"
+api_key = ""

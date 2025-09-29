@@ -1,0 +1,238 @@
+{
+  "11": {
+    "inputs": {
+      "model_name": "umt5-xxl-enc-bf16.safetensors",
+      "precision": "bf16",
+      "load_device": "main_device",
+      "quantization": "disabled"
+    },
+    "class_type": "LoadWanVideoT5TextEncoder",
+    "_meta": {
+      "title": "Load WanVideo T5 TextEncoder"
+    }
+  },
+  "13": {
+    "inputs": {
+      "model_name": "open-clip-xlm-roberta-large-vit-huge-14_fp16.safetensors",
+      "precision": "fp16",
+      "load_device": "offload_device"
+    },
+    "class_type": "LoadWanVideoClipTextEncoder",
+    "_meta": {
+      "title": "Load WanVideo Clip Encoder"
+    }
+  },
+  "16": {
+    "inputs": {
+      "positive_prompt": [
+        "46",
+        0
+      ],
+      "negative_prompt": "Colorful color tone, overexposure, static, blurry details, subtitles, style, artwork, picture, static, overall graying, worst quality, low-quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, finger fusion, still image, cluttered background, three legs, many people walking backwards",
+      "force_offload": true,
+      "speak_and_recognation": {
+        "__value__": [
+          false,
+          true
+        ]
+      },
+      "t5": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "WanVideoTextEncode",
+    "_meta": {
+      "title": "WanVideo TextEncode"
+    }
+  },
+  "17": {
+    "inputs": {
+      "generation_width": 600,
+      "generation_height": 800,
+      "num_frames": 125,
+      "force_offload": true,
+      "noise_aug_strength": 0,
+      "latent_strength": 0.7030000000000002,
+      "clip_embed_strength": 1,
+      "adjust_resolution": true,
+      "clip_vision": [
+        "13",
+        0
+      ],
+      "image": [
+        "18",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "WanVideoImageClipEncode",
+    "_meta": {
+      "title": "WanVideo ImageClip Encode (Deprecated)"
+    }
+  },
+  "18": {
+    "inputs": {
+      "image": ""
+    },
+    "class_type": "ETN_LoadImageBase64",
+    "_meta": {
+      "title": "Load Image (Base64)"
+    }
+  },
+  "21": {
+    "inputs": {
+      "model_name": "Wan2_1_VAE_bf16.safetensors",
+      "precision": "bf16"
+    },
+    "class_type": "WanVideoVAELoader",
+    "_meta": {
+      "title": "WanVideo VAE Loader"
+    }
+  },
+  "22": {
+    "inputs": {
+      "model": "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors",
+      "base_precision": "bf16",
+      "quantization": "fp8_e4m3fn",
+      "load_device": "main_device",
+      "attention_mode": "sageattn"
+    },
+    "class_type": "WanVideoModelLoader",
+    "_meta": {
+      "title": "WanVideo Model Loader"
+    }
+  },
+  "27": {
+    "inputs": {
+      "steps": 30,
+      "cfg": 7.500000000000002,
+      "shift": 9.000000000000002,
+      "seed": 791563443890638,
+      "force_offload": true,
+      "scheduler": "euler",
+      "riflex_freq_index": 0,
+      "denoise_strength": 1,
+      "batched_cfg": false,
+      "rope_function": "comfy",
+      "model": [
+        "22",
+        0
+      ],
+      "text_embeds": [
+        "16",
+        0
+      ],
+      "image_embeds": [
+        "17",
+        0
+      ],
+      "teacache_args": [
+        "44",
+        0
+      ],
+      "slg_args": [
+        "48",
+        0
+      ]
+    },
+    "class_type": "WanVideoSampler",
+    "_meta": {
+      "title": "WanVideo Sampler"
+    }
+  },
+  "28": {
+    "inputs": {
+      "enable_vae_tiling": false,
+      "tile_x": 272,
+      "tile_y": 272,
+      "tile_stride_x": 144,
+      "tile_stride_y": 128,
+      "vae": [
+        "21",
+        0
+      ],
+      "samples": [
+        "27",
+        0
+      ]
+    },
+    "class_type": "WanVideoDecode",
+    "_meta": {
+      "title": "WanVideo Decode"
+    }
+  },
+  "30": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "WanVideo2_1",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 13,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "28",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "44": {
+    "inputs": {
+      "rel_l1_thresh": 0.20000000000000004,
+      "start_step": 1,
+      "end_step": -1,
+      "cache_device": "offload_device",
+      "use_coefficients": true,
+      "mode": "e"
+    },
+    "class_type": "WanVideoTeaCache",
+    "_meta": {
+      "title": "WanVideo TeaCache"
+    }
+  },
+  "46": {
+    "inputs": {
+      "from_translate": "auto",
+      "to_translate": "english",
+      "add_proxies": false,
+      "proxies": "",
+      "auth_data": "",
+      "service": "GoogleTranslator",
+      "text": "女孩开始跳舞",
+      "hide_proxy": "proxy_hide",
+      "hide_authorization": "authorization_hide",
+      "speak_and_recognation": {
+        "__value__": [
+          false,
+          true
+        ]
+      }
+    },
+    "class_type": "DeepTranslatorTextNode",
+    "_meta": {
+      "title": "Deep Translator Text Node"
+    }
+  },
+  "48": {
+    "inputs": {
+      "blocks": "9",
+      "start_percent": 0.1,
+      "end_percent": 1
+    },
+    "class_type": "WanVideoSLG",
+    "_meta": {
+      "title": "WanVideo SLG"
+    }
+  }
+}

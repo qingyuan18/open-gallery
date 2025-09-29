@@ -1,0 +1,47 @@
+{
+  "title": "Canvas",
+  "rename": "Rename Canvas",
+  "delete": "Delete Canvas",
+  "share": "Share Canvas",
+  "export": "Export Canvas",
+  "exportImages": "Export Images",
+  "import": "Import Canvas",
+  "untitled": "Untitled",
+  "back": "Back",
+  "saveSnapshot": "Save Snapshot",
+  "loadSnapshot": "Load Snapshot",
+  "saved": "Saved ✅",
+  "messages": {
+    "canvasRenamed": "Canvas renamed successfully",
+    "canvasDeleted": "Canvas deleted successfully",
+    "canvasExported": "Canvas exported successfully",
+    "canvasImported": "Canvas imported successfully",
+    "failedToRename": "Failed to rename canvas",
+    "failedToDelete": "Failed to delete canvas",
+    "failedToCreateFile": "Failed to create file",
+    "noImagesSelected": "No images selected",
+    "exportingImages": "Exporting images...",
+    "failedToExportImages": "Failed to export images"
+  },
+  "deleteDialog": {
+    "title": "Delete Canvas",
+    "description": "Are you sure you want to delete this Canvas? This action cannot be undone.",
+    "cancel": "Cancel",
+    "delete": "Delete"
+  },
+  "tool": {
+    "hand": "Hand",
+    "selection": "Selection",
+    "rectangle": "Rectangle",
+    "ellipse": "Ellipse",
+    "text": "Text",
+    "image": "Image",
+    "shape": "Shape",
+    "arrow": "Arrow",
+    "line": "Line",
+    "zoomFit": "Zoom to fit"
+  },
+  "popbar": {
+    "addToChat": "Add to chat"
+  }
+}

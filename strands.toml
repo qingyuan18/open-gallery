@@ -1,0 +1,13 @@
+[tools]
+# 排除不应该被自动注册为工具的文件
+exclude = [
+    "strands_image_generators.py",
+    "__init__.py",
+    "__pycache__"
+]
+
+# 工具目录配置
+directories = ["tools"]
+
+# 是否启用工具热重载
+hot_reload = false

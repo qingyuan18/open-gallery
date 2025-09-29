@@ -1,0 +1,24 @@
+{
+  "newChat": "新建聊天",
+  "placeholder": "在这里输入你的消息...",
+  "textarea": {
+    "placeholder": "输入您的设计需求",
+    "selectModel": "请选择一个文本模型！如果您还没有设置 API 密钥，请前往设置页面进行配置。",
+    "enterPrompt": "请输入提示内容"
+  },
+  "messages": {
+    "imagePositioning": "定位到图片",
+    "showMore": "显示更多",
+    "showLess": "收起"
+  },
+  "thinking": {
+    "title": "思考过程"
+  },
+  "plan": {
+    "title": "计划",
+    "steps": {
+      "singular": "步骤",
+      "plural": "步骤"
+    }
+  }
+}

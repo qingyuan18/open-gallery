@@ -1,0 +1,24 @@
+{
+  "newChat": "New Chat",
+  "placeholder": "Type your message here...",
+  "textarea": {
+    "placeholder": "Enter your design requirements",
+    "selectModel": "Please select a text model! Go to Settings to set your API keys if you haven't done so.",
+    "enterPrompt": "Please enter a prompt"
+  },
+  "messages": {
+    "imagePositioning": "Go to image",
+    "showMore": "Show More",
+    "showLess": "Show Less"
+  },
+  "thinking": {
+    "title": "Thinking"
+  },
+  "plan": {
+    "title": "Plan",
+    "steps": {
+      "singular": "step",
+      "plural": "steps"
+    }
+  }
+}

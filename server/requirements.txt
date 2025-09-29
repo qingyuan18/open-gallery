@@ -1,0 +1,26 @@
+fastapi
+uvicorn[standard]
+anthropic
+mcp
+toml
+pyinstaller
+openai
+ollama
+httpx
+gunicorn
+aiosqlite
+requests
+Pillow
+nanoid
+python-multipart
+aiofiles
+certifi
+websocket-client # needed for comfyui execution
+rich # needed for comfyui execution
+typer # needed for comfyui execution
+strands-agents
+strands-agents-tools
+python-socketio==5.13.0
+boto3>=1.34.44
+botocore>=1.34.44
+PyJWT>=2.8.0
