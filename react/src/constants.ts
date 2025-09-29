@@ -11,7 +11,7 @@ const getBaseApiUrl = () => {
 
   // 如果当前访问的是 EC2 域名，则 API 也使用 EC2 域名
   if (hostname.includes('amazonaws.com') || hostname.includes('ec2-')) {
-    return 'http://ec2-52-24-176-86.us-west-2.compute.amazonaws.com:57988'
+    return `http://${hostname}:57988`
   }
 
   // 本地开发环境
