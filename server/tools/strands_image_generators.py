@@ -718,7 +718,6 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                 is_multi_model = False
             if is_multi_mode and is_multi_model:
                 try:
-                    from services.db_service import db_service
                     last_text = ""
                     messages = db_service.get_chat_history(session_id)
                     for m in reversed(messages):
