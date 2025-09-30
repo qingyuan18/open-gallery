@@ -50,7 +50,7 @@ def create_generate_video_with_context(session_id: str, canvas_id: str, video_mo
         input_image: Annotated[str, Field(description="Optional image to use as reference for image-to-video generation. Pass image_id here, e.g. 'im_jurheut7.png'. Leave empty for text-to-video generation.")] = "",
         duration: Annotated[int, Field(description="Video duration in seconds (typically 3-10 seconds)")] = 5,
         use_previous_image: Annotated[bool, Field(description="Whether to automatically use the most recent image from the current session as input for image-to-video generation")] = True,
-        model_override: Annotated[str, Field(description="Override model to use for video generation (e.g., 'wan-t2i' or 'wan-i2v'). If set, takes precedence over configured video_model.")] = ""
+        model_override: Annotated[str, Field(description="Override model to use for video generation (e.g., 'wan-t2v' or 'wan-i2v'). If set, takes precedence over configured video_model.")] = ""
     ) -> str:
         """
         Generate a video based on text prompt and optionally an input image.
