@@ -511,7 +511,7 @@ Be helpful, accurate, and creative in your responses.
                 intent_set = False
                 if auto_model_selection and has_use_agent and use_agent_tool:
                     child_system_prompt = (
-                        "You are an intent classifier for image editing/generation.\n"
+                        "You are an intent classifier for image/video editing and generation.\n"
                         "Output STRICT JSON only, no extra text.\n"
                         "Fields:\n"
                         "  - mode: \"single_img_edit\" | \"multiple_img_edit\" | \"text_to_image\" | \"text_to_video\" | \"image_to_video\"\n"
@@ -520,6 +520,13 @@ Be helpful, accurate, and creative in your responses.
                         "  - reasoning: short Chinese explanation\n"
                         "Rules:\n"
                         "  - Analyze ONLY the user's current request text (no tool usage besides use_agent).\n"
+                        "  - For VIDEO generation requests:\n"
+                        "    * If user explicitly mentions using/editing/based on an existing image/photo (keywords: '图', '照片', 'image', 'photo', 'picture', 'i2v', '基于', '根据'), choose mode=\"image_to_video\" and generation_model=\"wan-i2v\"\n"
+                        "    * Otherwise, for pure text-to-video requests (keywords: '生成视频', '创建视频', 'generate video', 'create video', 't2v'), choose mode=\"text_to_video\" and generation_model=\"wan-t2v\"\n"
+                        "  - For IMAGE generation requests:\n"
+                        "    * If user wants to merge/blend/combine multiple images (keywords: '融合', '合并', '结合', '混合', 'blend', 'merge', 'combine'), choose mode=\"multiple_img_edit\" and generation_model=\"qwen-image-multiple\"\n"
+                        "    * If user wants to edit/modify a single image (keywords: '修改', '编辑', '改变', 'edit', 'modify', 'change'), choose mode=\"single_img_edit\" and generation_model=\"flux-kontext\"\n"
+                        "    * Otherwise, for pure text-to-image requests, choose mode=\"text_to_image\" and generation_model=\"flux-t2i\"\n"
                         "  - If the user references three images explicitly (e.g., '第三张', '三张', 'image 3', '图3', 'three', 'third'), set input_image_num to 3. Otherwise set to 2.\n"
                         "  - Do not include any additional commentary. JSON only.\n"
                         "  - Start your response with '{' (left brace). Do NOT use code fences or backticks.\n"
