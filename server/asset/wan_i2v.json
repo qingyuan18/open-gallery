@@ -433,18 +433,6 @@
       "title": "Int"
     }
   },
-  "116": {
-    "inputs": {
-      "images": [
-        "28",
-        0
-      ]
-    },
-    "class_type": "PreviewImage",
-    "_meta": {
-      "title": "预览图像"
-    }
-  },
   "118": {
     "inputs": {
       "model": "Wan2_2-i2v-low-fp8.safetensors",
