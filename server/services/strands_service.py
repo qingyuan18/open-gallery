@@ -326,7 +326,7 @@ When users request image or video generation:
    - flux-kontext (single image edit)
    - qwen-image-multiple (multiple image edit)
    - flux-t2i (text-to-image)
-   - wan-t2i (text-to-video)
+   - wan-t2v (text-to-video)
    - wan-i2v (image-to-video)
    Important: Explicitly pass model_override=generation_model for precision and traceability.
 
@@ -337,7 +337,7 @@ Below is the STRICT JSON template the child agent uses when classifying intent (
 - Output STRICT JSON only, no extra text.
 - Fields:
   - mode: "single_img_edit" | "multiple_img_edit" | "text_to_image" | "text_to_video" | "image_to_video"
-  - generation_model: one of "flux-kontext", "qwen-image-multiple", "flux-t2i", "wan-t2i", "wan-i2v"
+  - generation_model: one of "flux-kontext", "qwen-image-multiple", "flux-t2i", "wan-t2v", "wan-i2v"
   - reasoning: short Chinese explanation
 - Rules:
   - Analyze ONLY the user's intent from their request text, ignore whether images are already uploaded
@@ -515,7 +515,7 @@ Be helpful, accurate, and creative in your responses.
                         "Output STRICT JSON only, no extra text.\n"
                         "Fields:\n"
                         "  - mode: \"single_img_edit\" | \"multiple_img_edit\" | \"text_to_image\" | \"text_to_video\" | \"image_to_video\"\n"
-                        "  - generation_model: one of \"flux-kontext\", \"qwen-image-multiple\", \"flux-t2i\", \"wan-t2i\", \"wan-i2v\"\n"
+                        "  - generation_model: one of \"flux-kontext\", \"qwen-image-multiple\", \"flux-t2i\", \"wan-t2v\", \"wan-i2v\"\n"
                         "  - input_image_num: integer (only when mode=multiple_img_edit). Decide from the user's text if they ask for 2 or 3 images; default to 2.\n"
                         "  - reasoning: short Chinese explanation\n"
                         "Rules:\n"
