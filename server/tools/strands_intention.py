@@ -4,7 +4,7 @@ Strands intention tool (fallback)
 - single_img_edit → flux-kontext
 - multiple_img_edit → qwen-image-multiple
 - text_to_image → flux-t2i
-- text_to_video → wan-t2i
+- text_to_video → wan-t2v
 - image_to_video → wan-i2v
 """
 from typing import Dict, Any
@@ -74,7 +74,7 @@ def analyze_edit_intention(
             else:
                 result.update({
                     "mode": "text_to_video",
-                    "generation_model": "wan-t2i",
+                    "generation_model": "wan-t2v",
                     "reasoning": "检测到视频意图，将进行文本生视频"
                 })
         else:
