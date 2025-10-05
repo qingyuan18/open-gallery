@@ -98,7 +98,7 @@
   },
   "38": {
     "inputs": {
-      "unet_name": "flux1-dev-fp8.safetensors",
+      "unet_name": "flux1-dev-fp8-unet.safetensors",
       "weight_dtype": "fp8_e4m3fn"
     },
     "class_type": "UNETLoader",
@@ -108,7 +108,7 @@
   },
   "40": {
     "inputs": {
-      "vae_name": "FLUX1/ae.safetensors"
+      "vae_name": "ae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {

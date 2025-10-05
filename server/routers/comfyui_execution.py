@@ -62,6 +62,13 @@ async def execute(workflow: dict, host, port, wait=True, verbose=False, local_pa
     finally:
         if progress:
             progress.stop()
+        # Close WebSocket connection properly
+        if execution.ws:
+            try:
+                await execution.ws.close()
+                print("🔍 DEBUG: WebSocket connection closed properly")
+            except Exception as e:
+                print(f"⚠️ Warning: Error closing WebSocket: {e}")
     return execution
 
 
@@ -149,11 +156,25 @@ class WorkflowExecution:
                 raise Exception(message)
 
     async def watch_execution(self):
-        async for message in self.ws:
-            if isinstance(message, str):
-                message = json.loads(message)
-                if not await self.on_message(message):
-                    break
+        try:
+            # Add timeout to prevent hanging indefinitely
+            async with asyncio.timeout(self.timeout):
+                async for message in self.ws:
+                    if isinstance(message, str):
+                        message = json.loads(message)
+                        if not await self.on_message(message):
+                            break
+        except asyncio.TimeoutError:
+            error_msg = f"Workflow execution timed out after {self.timeout} seconds"
+            print(f"❌ {error_msg}")
+            await send_to_websocket(self.ctx.get('session_id'), {
+                'type': 'error',
+                'error': error_msg
+            })
+            raise Exception(error_msg)
+        except Exception as e:
+            print(f"❌ Error during workflow execution: {e}")
+            raise
 
     def update_overall_progress(self):
         self.progress.update(self.overall_task, completed=self.total_nodes - len(self.remaining_nodes))
