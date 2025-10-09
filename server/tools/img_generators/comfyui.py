@@ -399,11 +399,17 @@ class ComfyUIGenerator(ImageGenerator):
             workflow['14']['inputs'] = workflow['14'].get('inputs', {})
             workflow['14']['inputs']['image'] = image_data_list[1]['base64']
 
-        # Prefill image3 with the first image by default (two-image case)
+        # image3 -> node 40
+        # If 3 images provided, use the third image; otherwise use the first image as fallback (two-image case)
         if '40' in workflow:
             workflow['40']['class_type'] = 'ETN_LoadImageBase64'
             workflow['40']['inputs'] = workflow['40'].get('inputs', {})
-            workflow['40']['inputs']['image'] = image_data_list[0]['base64']
+            if len(image_data_list) >= 3:
+                workflow['40']['inputs']['image'] = image_data_list[2]['base64']
+            else:
+                # Fallback: use first image for two-image case
+                workflow['40']['inputs']['image'] = image_data_list[0]['base64']
+
         # Debug: verify node wiring for image3 path
         try:
             img1_len = len(workflow.get('15', {}).get('inputs', {}).get('image', '') or '')
@@ -415,10 +421,6 @@ class ComfyUIGenerator(ImageGenerator):
             print(f"🔧 Node11 image3 source -> expects node 42 -> node42 image source -> node 40")
         except Exception as _e:
             print(f"⚠️ Failed to verify node wiring: {_e}")
-
-        # Third image (image3) -> node 40 (override if provided)
-        if '40' in workflow and len(image_data_list) >= 3:
-            workflow['40']['inputs']['image'] = image_data_list[2]['base64']
 
         # Text prompt node -> node 35
         if '35' in workflow:

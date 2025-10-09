@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comfyui
+  namespace: default
+  labels:
+    app: comfyui
+    version: v1
+    deployment-type: s3
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: comfyui
+  template:
+    metadata:
+      labels:
+        app: comfyui
+        version: v1
+    spec:
+      nodeSelector:
+        workload: gpu
+      # Optional: Use tolerations if you have taints on GPU nodes
+      # tolerations:
+      # - key: nvidia.com/gpu
+      #   operator: Exists
+      #   effect: NoSchedule
+      containers:
+      - name: comfyui
+        # S3 mount version - smaller image, requires S3 CSI driver
+        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/comfyui-s3:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8188
+          name: http
+          protocol: TCP
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            memory: "32Gi"
+            cpu: "8"
+          requests:
+            nvidia.com/gpu: 1
+            memory: "16Gi"
+            cpu: "4"
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8188
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8188
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # Volume mounts
+        volumeMounts:
+        # Mount S3 models - all models come from S3
+        - name: s3-models
+          mountPath: /opt/program/models
+          readOnly: true
+        
+        # Environment variables
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        # Optional: AWS credentials for S3 access (if not using IRSA)
+        # - name: AWS_ACCESS_KEY_ID
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: aws-credentials
+        #       key: access-key-id
+        # - name: AWS_SECRET_ACCESS_KEY
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: aws-credentials
+        #       key: secret-access-key
+        # - name: AWS_DEFAULT_REGION
+        #   value: "us-west-2"
+      
+      # Volumes
+      volumes:
+      # S3 volume for models
+      - name: s3-models
+        persistentVolumeClaim:
+          claimName: comfyui-models-pvc
+

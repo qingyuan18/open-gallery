@@ -428,9 +428,9 @@
     "inputs": {
       "value": 1
     },
-    "class_type": "Int-🔬",
+    "class_type": "Primitive integer [Crystools]",
     "_meta": {
-      "title": "Int"
+      "title": "🪛 Primitive integer"
     }
   },
   "118": {

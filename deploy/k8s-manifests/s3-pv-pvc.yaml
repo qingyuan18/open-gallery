@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: comfyui-models-pv
+spec:
+  capacity:
+    storage: 1000Gi  # Arbitrary value for S3
+  accessModes:
+    - ReadOnlyMany
+  mountOptions:
+    - allow-delete
+    - region us-west-2
+  csi:
+    driver: s3.csi.aws.com
+    volumeHandle: salunchbucket  # Your S3 bucket name
+    volumeAttributes:
+      bucketName: salunchbucket
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: comfyui-models-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  resources:
+    requests:
+      storage: 1000Gi
+  volumeName: comfyui-models-pv
+

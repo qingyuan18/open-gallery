@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: open-gallery-config
+  namespace: default
+  labels:
+    app: open-gallery
+data:
+  config.toml: |
+    # Open Gallery Configuration for EKS Deployment
+    # This is the COMPLETE configuration file
+    # Modify this ConfigMap to update application settings
+
+    # Database configuration
+    [database]
+    type = "sqlite"  # Use "sqlite" for SQLite, "dynamodb" for DynamoDB
+
+    [database.sqlite]
+    # SQLite configuration - path will be in mounted volume
+    # path = "/app/server/user_data/database.db"  # Default path
+
+    [database.dynamodb]
+    region = "us-west-2"  # AWS region where DynamoDB tables are located
+
+    # LLM Provider configurations
+    [anthropic]
+    models = { "claude-3-7-sonnet-latest" = { type = "text" } }
+    url = "https://api.anthropic.com/v1/"
+    api_key = ""  # Set via environment variable ANTHROPIC_API_KEY or Kubernetes Secret
+    max_tokens = 8192
+
+    [openai]
+    models = {
+        "gpt-4o" = { type = "text" },
+        "gpt-4o-mini" = { type = "text" },
+        "gpt-image-1" = { type = "image" }
+    }
+    url = "https://api.openai.com/v1/"
+    api_key = ""  # Set via environment variable OPENAI_API_KEY or Kubernetes Secret
+    max_tokens = 8192
+
+    [bedrock]
+    models = {
+        "us.anthropic.claude-3-7-sonnet-20250219-v1:0" = { type = "text" },
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0" = { type = "text" },
+        "us.anthropic.claude-3-5-haiku-20241022-v1:0" = { type = "text" }
+    }
+    url = ""
+    api_key = ""  # Not needed for Bedrock - uses AWS credentials (IRSA)
+    max_tokens = 8192
+    region = "us-west-2"
+
+    [siliconflow]
+    models = {
+        "deepseek-ai/DeepSeek-V3" = { type = "text" }
+    }
+    url = "https://api.siliconflow.cn/v1/"
+    api_key = ""  # Set via environment variable SILICONFLOW_API_KEY or Kubernetes Secret
+    max_tokens = 8192
+
+    # ComfyUI configuration - uses internal Kubernetes ClusterIP service
+    [comfyui]
+    models = {
+        "flux-kontext" = { type = "comfyui", media_type = "image" },
+        "qwen-image-multiple" = { type = "comfyui", media_type = "image" },
+        "flux-t2i" = { type = "comfyui", media_type = "image" },
+        "wan-t2v" = { type = "comfyui", media_type = "video" },
+        "wan-i2v" = { type = "comfyui", media_type = "video" }
+    }
+    # Internal Kubernetes service endpoint - DO NOT change unless you know what you're doing
+    url = "http://comfyui-service.default.svc.cluster.local:8188"
+    api_key = ""
+

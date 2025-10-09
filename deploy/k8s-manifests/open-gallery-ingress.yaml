@@ -1,0 +1,75 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: open-gallery-ingress
+  namespace: default
+  labels:
+    app: open-gallery
+  annotations:
+    # ALB Configuration
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    
+    # Health Check Configuration
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    
+    # Connection Settings
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=3600
+    
+    # Target Group Settings
+    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=10800,deregistration_delay.timeout_seconds=30
+    
+    # Security Groups (optional - specify your security group IDs)
+    # alb.ingress.kubernetes.io/security-groups: sg-xxxxxxxxx
+    
+    # Subnets (optional - specify your public subnet IDs)
+    # alb.ingress.kubernetes.io/subnets: subnet-xxxxxxxx,subnet-yyyyyyyy
+    
+    # Tags
+    alb.ingress.kubernetes.io/tags: Environment=production,Application=comfyui
+    
+    # Optional: Enable HTTPS with ACM certificate
+    # Step 1: Request or import a certificate in AWS Certificate Manager (ACM)
+    # Step 2: Uncomment the following lines and replace with your certificate ARN
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    # alb.ingress.kubernetes.io/ssl-redirect: '443'
+    # alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
+    
+    # Optional: WAF ACL (Web Application Firewall)
+    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:us-west-2:123456789012:regional/webacl/name/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    
+    # Optional: Access Logs
+    # alb.ingress.kubernetes.io/load-balancer-attributes: access_logs.s3.enabled=true,access_logs.s3.bucket=my-alb-logs-bucket,access_logs.s3.prefix=comfyui
+    
+spec:
+  ingressClassName: alb
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: open-gallery-service
+            port:
+              number: 80
+
+  # Optional: Add host-based routing
+  # - host: open-gallery.example.com
+  #   http:
+  #     paths:
+  #     - path: /
+  #       pathType: Prefix
+  #       backend:
+  #         service:
+  #           name: open-gallery-service
+  #           port:
+  #             number: 80
+

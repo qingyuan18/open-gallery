@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: comfyui-config
+  namespace: default
+data:
+  # ComfyUI configuration settings
+  extra_model_paths.yaml: |
+    # Extra model paths configuration
+    # This allows ComfyUI to find models in multiple locations
+    comfyui:
+      base_path: /opt/program/
+      checkpoints: models/diffusion_models/
+      vae: models/vae/
+      loras: models/loras/
+      clip: models/clip/
+      clip_vision: models/clip_vision/
+      text_encoders: models/text_encoders/
+      unet: models/unet/
+    
+    # S3 mounted models (if using S3 PVC)
+    s3_models:
+      base_path: /mnt/s3/
+      checkpoints: models/wan/
+      loras: models/wan/
+      vae: models/flux/
+      clip: models/flux/
+  
+  # Environment configuration
+  env.conf: |
+    COMFYUI_PORT=8188
+    COMFYUI_LISTEN=0.0.0.0
+    CUDA_VISIBLE_DEVICES=0
+    PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+

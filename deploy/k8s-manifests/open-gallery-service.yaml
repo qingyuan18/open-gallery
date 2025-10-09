@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-gallery-service
+  namespace: default
+  labels:
+    app: open-gallery
+  annotations:
+    # Service for open-gallery web application
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "57988"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app: open-gallery
+  ports:
+  - port: 80
+    targetPort: 57988
+    protocol: TCP
+    name: http
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600  # 1 hour session affinity
+
