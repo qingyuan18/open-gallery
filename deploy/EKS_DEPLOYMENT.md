@@ -8,7 +8,8 @@
 
 ```
 deploy/
-├── EKS_DEPLOYMENT.md                      # 本文档 (部署指南)
+├── EKS_DEPLOYMENT.md                      # 本文档 (完整部署指南)
+├── COMFYUI_S3_STANDALONE.md               # ComfyUI-S3 独立测试部署指南
 ├── CONFIG-GUIDE.md                        # 配置管理详细指南
 │
 ├── Dockerfiles
@@ -24,6 +25,7 @@ deploy/
 │   │
 │   ├── comfyui-deployment.yaml            # ComfyUI 部署 (S3 模式)
 │   ├── comfyui-deployment-embedded.yaml   # ComfyUI 部署 (Embedded 模式)
+│   ├── comfyui-s3-standalone.yaml         # ComfyUI-S3 独立测试部署
 │   ├── comfyui-service.yaml               # ComfyUI 服务 (内部)
 │   ├── comfyui-configmap.yaml             # ComfyUI 配置
 │   ├── comfyui-hpa.yaml                   # 自动扩展配置
@@ -33,9 +35,10 @@ deploy/
 │
 └── scripts/                               # 部署脚本
     ├── build-and-push.sh                  # 构建和推送镜像
-    ├── deploy-to-eks.sh                   # 部署到 EKS
-    ├── setup-s3-csi.sh                    # S3 CSI 设置 (可选)
-    └── upload-models-to-s3.sh             # 上传模型到 S3 (可选)
+    ├── deploy-to-eks.sh                   # 部署到 EKS (完整部署)
+    ├── deploy-comfyui-s3-standalone.sh    # ComfyUI-S3 独立测试部署
+    ├── setup-s3-csi.sh                    # S3 CSI 设置 (支持 Pod Identity 和 IRSA)
+    └── upload-models-to-s3.sh             # 上传模型到 S3
 ```
 
 ---
@@ -84,6 +87,7 @@ Open Gallery Service (ClusterIP:80)
 
 ---
 
+
 ## ⚙️ 前置条件
 
 ### 必需资源
@@ -112,6 +116,26 @@ kubectl get deployment -n kube-system aws-load-balancer-controller
 
 ## 🚀 快速开始
 
+### 方式零: ComfyUI-S3 独立测试 (最快速)
+
+**仅测试 ComfyUI-S3，不包含 Open Gallery**
+
+```bash
+# 一键部署 ComfyUI-S3 用于测试
+cd deploy
+./scripts/deploy-comfyui-s3-standalone.sh
+
+# 部署完成后，使用 port-forward 访问
+kubectl port-forward -n comfyui-test <pod-name> 8188:8188
+
+# 浏览器访问
+open http://localhost:8188
+```
+
+详细说明请参考: **[COMFYUI_S3_STANDALONE.md](COMFYUI_S3_STANDALONE.md)**
+
+---
+
 ### 方式一: Embedded 模式 (最简单)
 
 ```bash
@@ -133,18 +157,14 @@ kubectl get ingress open-gallery-ingress
 ### 方式二: S3 模式 (生产推荐)
 
 ```bash
-# 1. 在 EKS 控制台安装 S3 CSI Driver
-# 导航到: EKS Console → Clusters → [Your Cluster] → Add-ons → Get more add-ons
-# 选择: Mountpoint for Amazon S3 CSI Driver
-# 或使用 AWS CLI:
-aws eks create-addon \
+# 1. 设置 S3 CSI Driver (使用 Pod Identity)
+./scripts/setup-s3-csi.sh \
     --cluster-name your-cluster-name \
-    --addon-name aws-mountpoint-s3-csi-driver \
-    --region us-west-2
+    --bucket comfyui-models-bucket-687912291502 \
+    --use-pod-identity
 
-# 2. 创建 S3 Bucket 并上传模型
-aws s3 mb s3://your-comfyui-models-bucket
-./scripts/upload-models-to-s3.sh -i
+# 2. 上传模型到 S3
+./scripts/upload-models-to-s3.sh --bucket comfyui-models-bucket-687912291502
 
 # 3. 更新 k8s-manifests/s3-pv-pvc.yaml 中的 bucketName
 
@@ -184,42 +204,52 @@ cd deploy
 
 **仅在使用 S3 模式时需要**
 
-#### 在 EKS 控制台安装 S3 CSI Driver
-
-1. 打开 AWS EKS 控制台
-2. 选择你的集群
-3. 点击 "Add-ons" 标签
-4. 点击 "Get more add-ons"
-5. 选择 "Mountpoint for Amazon S3 CSI Driver"
-6. 点击 "Next" → "Create"
-
-或使用 AWS CLI:
+#### S3 CSI Driver 安装方式
 
 ```bash
-aws eks create-addon \
-    --cluster-name your-cluster-name \
-    --addon-name aws-mountpoint-s3-csi-driver \
-    --region us-west-2
-```
-
-#### 配置 IAM 和上传模型
-
-```bash
-# 创建 IAM 策略
+# 步骤 1: 创建 IAM 策略
 aws iam create-policy \
     --policy-name ComfyUI-S3-CSI-Policy \
     --policy-document file://k8s-manifests/s3-csi-policy.json
 
-# 为 Service Account 创建 IAM Role
-eksctl create iamserviceaccount \
-    --name comfyui-s3-sa \
-    --namespace default \
-    --cluster your-cluster-name \
-    --attach-policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/ComfyUI-S3-CSI-Policy \
-    --approve
+# 步骤 2: 安装 S3 CSI Driver (EKS Add-on)
+aws eks create-addon \
+    --cluster-name your-cluster-name \
+    --addon-name aws-mountpoint-s3-csi-driver \
+    --region us-west-2
 
-# 上传模型到 S3
-./scripts/upload-models-to-s3.sh -i
+# 步骤 3: 创建 Pod Identity 关联
+aws eks create-pod-identity-association \
+    --cluster-name your-cluster-name \
+    --namespace kube-system \
+    --service-account s3-csi-driver-sa \
+    --role-arn arn:aws:iam::ACCOUNT_ID:role/ComfyUI-S3-CSI-Role
+
+# 或使用自动化脚本 (推荐)
+./scripts/setup-s3-csi.sh \
+    --cluster-name your-cluster-name \
+    --bucket comfyui-models-bucket-687912291502 \
+    --use-pod-identity  # 使用 Pod Identity 而非 IRSA
+```
+
+
+#### 上传模型到 S3
+
+```bash
+# 创建 S3 bucket (如果不存在)
+aws s3 mb s3://your-comfyui-models-bucket
+
+# 上传所有 ComfyUI 模型
+./scripts/upload-models-to-s3.sh \
+    --bucket your-comfyui-models-bucket \
+    --region us-west-2
+
+# 可选参数
+./scripts/upload-models-to-s3.sh \
+    --bucket your-bucket \
+    --skip-existing \
+    --parallel 8 \
+    --dry-run  # 预览要上传的文件
 ```
 
 ### 步骤 3: 部署到 EKS
@@ -368,14 +398,76 @@ kubectl run test-pod --rm -it --image=busybox -- \
 ### S3 挂载问题
 
 ```bash
-# 检查 S3 CSI Driver
+# 检查 S3 CSI Driver Pods
 kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-mountpoint-s3-csi-driver
+
+# 检查 CSI Driver 状态
+kubectl get csidriver s3.csi.aws.com
 
 # 检查 PVC 状态
 kubectl get pvc comfyui-models-pvc
 
 # 检查 PV 状态
 kubectl get pv comfyui-models-pv
+
+# 对于 SageMaker HyperPod，检查 add-on 状态
+aws eks describe-addon \
+    --cluster-name your-cluster-name \
+    --addon-name aws-mountpoint-s3-csi-driver \
+    --region us-west-2
+
+# 检查 Service Account 和 IRSA
+kubectl get sa s3-csi-driver-sa -n kube-system -o yaml
+
+# 测试 S3 访问
+kubectl run s3-test --rm -it --image=busybox -- \
+    sh -c "ls -la /mnt/s3" \
+    --overrides='{"spec":{"volumes":[{"name":"s3-vol","persistentVolumeClaim":{"claimName":"comfyui-models-pvc"}}],"containers":[{"name":"s3-test","image":"busybox","volumeMounts":[{"name":"s3-vol","mountPath":"/mnt/s3"}]}]}}'
+```
+
+#### 常见 S3 CSI 问题
+
+**问题 1: PVC 一直处于 Pending 状态**
+```bash
+# 检查 PVC 事件
+kubectl describe pvc comfyui-models-pvc
+
+# 常见原因:
+# - S3 bucket 不存在或无权限访问
+# - CSI driver 未正确安装
+# - IRSA 配置错误
+```
+
+**问题 2: Pod Identity 关联错误**
+```bash
+# 检查 Pod Identity 关联
+aws eks list-pod-identity-associations \
+    --cluster-name your-cluster-name
+
+# 查看特定关联详情
+aws eks describe-pod-identity-association \
+    --cluster-name your-cluster-name \
+    --association-id ASSOCIATION_ID
+
+# 如果使用 IRSA，检查 Service Account 注解
+kubectl get sa s3-csi-driver-sa -n kube-system -o yaml
+```
+
+**问题 3: 挂载权限错误**
+```bash
+# 检查 IAM 策略是否包含必要权限
+aws iam get-policy-version \
+    --policy-arn arn:aws:iam::ACCOUNT:policy/ComfyUI-S3-CSI-Policy \
+    --version-id v1
+
+# 检查 IAM role 信任策略
+aws iam get-role --role-name ComfyUI-S3-CSI-Role
+
+# 对于 Pod Identity，确认信任策略包含:
+# "Service": "pods.eks.amazonaws.com"
+
+# 检查 S3 bucket 策略
+aws s3api get-bucket-policy --bucket comfyui-models-bucket-687912291502
 ```
 
 ---
@@ -405,27 +497,5 @@ aws ecr delete-repository --repository-name comfyui-s3 --force
 
 ---
 
-## 📚 相关文档
 
-- **[CONFIG-GUIDE.md](CONFIG-GUIDE.md)** - 配置管理详细指南
-  - 配置传递流程
-  - ConfigMap 完整示例
-  - API Keys 管理
-  - 常见问题解决
-
----
-
-## 🔐 安全最佳实践
-
-1. **使用 Secrets 存储敏感信息** - API Keys 不要放在 ConfigMap
-2. **启用 HTTPS** - 在 Ingress 中配置 ACM 证书
-3. **网络策略** - 限制 Pod 间通信
-4. **IRSA** - 使用 IAM Roles for Service Accounts
-5. **镜像扫描** - 启用 ECR 镜像扫描
-
----
-
-**版本:** 2.0.0  
-**状态:** 生产就绪  
-**最后更新:** 2025-10-09
 

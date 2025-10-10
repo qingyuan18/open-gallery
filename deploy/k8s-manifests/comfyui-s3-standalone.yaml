@@ -1,0 +1,127 @@
+---
+# Standalone ComfyUI-S3 Deployment for Testing
+# This is a minimal deployment for quick testing with port-forward
+# No service, no ingress, just the pod with S3 mount
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: comfyui-test
+  labels:
+    name: comfyui-test
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comfyui-s3-test
+  namespace: comfyui-test
+  labels:
+    app: comfyui-s3-test
+    version: test
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Faster for testing
+  selector:
+    matchLabels:
+      app: comfyui-s3-test
+  template:
+    metadata:
+      labels:
+        app: comfyui-s3-test
+        version: test
+    spec:
+      # Node selector for GPU nodes
+      nodeSelector:
+        node.kubernetes.io/instance-type: g5.xlarge  # Adjust based on your GPU node type
+      
+      # Tolerations for GPU nodes (uncomment if needed)
+      # tolerations:
+      # - key: nvidia.com/gpu
+      #   operator: Exists
+      #   effect: NoSchedule
+      
+      containers:
+      - name: comfyui
+        # Image will be replaced by deploy script
+        image: PLACEHOLDER_IMAGE
+        imagePullPolicy: Always
+        
+        ports:
+        - containerPort: 8188
+          name: http
+          protocol: TCP
+        
+        # Resource requests - minimal for testing
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            memory: "24Gi"
+            cpu: "6"
+          requests:
+            nvidia.com/gpu: 1
+            memory: "12Gi"
+            cpu: "3"
+        
+        # Simplified health checks for faster startup
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8188
+          initialDelaySeconds: 180
+          periodSeconds: 60
+          timeoutSeconds: 10
+          failureThreshold: 5
+        
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8188
+          initialDelaySeconds: 120
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 5
+        
+        # Volume mounts for S3 models
+        volumeMounts:
+        - name: s3-models
+          mountPath: /opt/program/models
+          readOnly: true
+        
+        # Environment variables
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: COMFYUI_PORT
+          value: "8188"
+      
+      # Volumes
+      volumes:
+      - name: s3-models
+        persistentVolumeClaim:
+          claimName: comfyui-models-pvc  # Will be created by setup script
+
+---
+# Optional: Service for internal access (not exposed externally)
+apiVersion: v1
+kind: Service
+metadata:
+  name: comfyui-s3-test-svc
+  namespace: comfyui-test
+  labels:
+    app: comfyui-s3-test
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8188
+    targetPort: 8188
+    protocol: TCP
+    name: http
+  selector:
+    app: comfyui-s3-test
+
