@@ -17,7 +17,8 @@ RUN mkdir -p /opt/program/models/unet/
 RUN mkdir -p /opt/program/custom_nodes/
 RUN chmod -R 777 /opt/program
 
-# Install basic dependencies
+# Install git and basic dependencies
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir fastapi uvicorn sagemaker
 RUN pip install sagemaker-ssh-helper
 RUN curl -L https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz | tar -xz && mv s5cmd /opt/program/
@@ -27,7 +28,12 @@ ENV PYTHONDONTWRITEBYTECODE=TRUE
 ENV PATH="/opt/program:${PATH}"
 
 ####install ComfyUI
-COPY ComfyUI /opt/program
+# Clone ComfyUI from official repository
+WORKDIR /opt/program
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git /tmp/comfyui && \
+    cp -r /tmp/comfyui/* /opt/program/ && \
+    rm -rf /tmp/comfyui
+
 RUN pip install -r /opt/program/requirements.txt
 
 # Install core dependencies

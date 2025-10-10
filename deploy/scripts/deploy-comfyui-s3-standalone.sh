@@ -42,7 +42,7 @@ S3_BUCKET="comfyui-models-bucket-687912291502"
 SKIP_BUILD=false
 SKIP_S3_SETUP=false
 NO_S3_MOUNT=false  # New option to deploy without S3 mount
-GPU_NODE_TYPE="g5.xlarge"
+GPU_NODE_TYPE="ml.g6e.2xlarge"
 
 # Parse command line arguments
 parse_arguments() {

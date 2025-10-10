@@ -74,7 +74,7 @@ cd deploy
 ./scripts/deploy-comfyui-s3-standalone.sh
 
 # 使用已有镜像（跳过构建）
-./scripts/deploy-comfyui-s3-standalone.sh --skip-build
+./scripts/deploy-comfyui-s3-standalone.sh --no-s3-mount
 
 # 自定义 S3 bucket
 ./scripts/deploy-comfyui-s3-standalone.sh --bucket comfyui-models-bucket-687912291502
