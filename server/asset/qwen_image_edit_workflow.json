@@ -1,8 +1,8 @@
 {
   "1": {
     "inputs": {
-      "unet_name": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
-      "weight_dtype": "fp8_e4m3fn"
+      "unet_name": "Qwen-Image-Edit-2509_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
     "_meta": {
@@ -32,7 +32,7 @@
   "5": {
     "inputs": {
       "conditioning": [
-        "11",
+        "49",
         0
       ]
     },
@@ -57,52 +57,9 @@
       "title": "VAE解码"
     }
   },
-  "11": {
-    "inputs": {
-      "prompt": [
-        "35",
-        0
-      ],
-      "enable_resize": true,
-      "enable_vl_resize": true,
-      "upscale_method": "lanczos",
-      "crop": "disabled",
-      "instruction": "<|im_start|>system\nDescribe the key features of the input image (color, shape, size, texture, objects, background), then explain how the user's text instruction should alter or modify the image. Generate a new image that meets the user's requirements while maintaining consistency with the original input where appropriate.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
-      "speak_and_recognation": {
-        "__value__": [
-          false,
-          true
-        ]
-      },
-      "clip": [
-        "2",
-        0
-      ],
-      "vae": [
-        "3",
-        0
-      ],
-      "image1": [
-        "37",
-        0
-      ],
-      "image2": [
-        "38",
-        0
-      ],
-      "image3": [
-        "42",
-        0
-      ]
-    },
-    "class_type": "TextEncodeQwenImageEditPlus_lrzjason",
-    "_meta": {
-      "title": "TextEncodeQwenImageEditPlus 小志Jason(xiaozhijason)"
-    }
-  },
   "14": {
     "inputs": {
-      "image": "clothes.png"
+      "image": "clothes.jpg"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -111,7 +68,7 @@
   },
   "15": {
     "inputs": {
-      "image": "dance_girl_00010_.png"
+      "image": "dance_girl_00006_.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -133,13 +90,7 @@
   },
   "35": {
     "inputs": {
-      "text": "image1中的女人穿着image2的服装，拿着image3的女包",
-      "speak_and_recognation": {
-        "__value__": [
-          false,
-          true
-        ]
-      }
+      "text": "图1中的女人穿着图2中的服装，保持人物一致性"
     },
     "class_type": "Text Multiline",
     "_meta": {
@@ -204,7 +155,7 @@
   },
   "40": {
     "inputs": {
-      "image": "ad03.png"
+      "image": "dance_girl_00006_.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -234,18 +185,18 @@
   },
   "44": {
     "inputs": {
-      "seed": 1082848238228642,
-      "steps": 20,
+      "seed": 29620590650888,
+      "steps": 8,
       "cfg": 2.5,
-      "sampler_name": "euler",
+      "sampler_name": "er_sde",
       "scheduler": "beta",
       "denoise": 1,
       "model": [
-        "1",
+        "47",
         0
       ],
       "positive": [
-        "11",
+        "49",
         0
       ],
       "negative": [
@@ -253,13 +204,64 @@
         0
       ],
       "latent_image": [
-        "11",
-        6
+        "49",
+        1
       ]
     },
     "class_type": "KSampler",
     "_meta": {
       "title": "K采样器"
+    }
+  },
+  "47": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Lightning-8steps-V1.1.safetensors",
+      "strength_model": 1,
+      "model": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "49": {
+    "inputs": {
+      "prompt": [
+        "35",
+        0
+      ],
+      "target_size": 1536,
+      "target_vl_size": 384,
+      "upscale_method": "lanczos",
+      "crop": "center",
+      "instruction": "Describe the key features of the input image (color, shape, size, texture, objects, background), then explain how the user's text instruction should alter or modify the image. Generate a new image that meets the user's requirements while maintaining consistency with the original input where appropriate.",
+      "clip": [
+        "2",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "vl_resize_image1": [
+        "37",
+        0
+      ],
+      "vl_resize_image2": [
+        "38",
+        0
+      ],
+      "vl_resize_image3": [
+        "42",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlusAdvance_lrzjason",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlusAdvance 小志Jason(xiaozhijason)"
     }
   }
 }

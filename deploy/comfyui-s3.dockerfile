@@ -124,7 +124,7 @@ RUN git clone https://github.com/thu-ml/SageAttention.git /tmp/SageAttention && 
     cd / && rm -rf /tmp/SageAttention
 
 #### Upgrade torch/torchvision/cuda dependencies
-RUN pip install -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+RUN pip install -U --forece-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 ###############################################################################
 # S3 MODEL MOUNTING CONFIGURATION
