@@ -77,10 +77,10 @@ cd deploy
 ./scripts/deploy-comfyui-s3-standalone.sh --skip-build
 
 # 自定义 S3 bucket
-./scripts/deploy-comfyui-s3-standalone.sh --bucket my-custom-bucket
+./scripts/deploy-comfyui-s3-standalone.sh --bucket comfyui-models-bucket-687912291502
 
 # 使用更大的 GPU 实例
-./scripts/deploy-comfyui-s3-standalone.sh --gpu-node-type g5.2xlarge
+./scripts/deploy-comfyui-s3-standalone.sh --gpu-node-type ml.g6e.2xlarge
 ```
 
 ### 步骤 4: 访问 ComfyUI
