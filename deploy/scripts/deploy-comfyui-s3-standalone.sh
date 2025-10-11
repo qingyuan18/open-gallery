@@ -10,8 +10,6 @@
 # - Sets up S3 PVC for models
 # - Provides port-forward command for testing
 
-set -e
-
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,6 +41,7 @@ SKIP_BUILD=false
 SKIP_S3_SETUP=false
 NO_S3_MOUNT=false  # New option to deploy without S3 mount
 GPU_NODE_TYPE="ml.g6e.2xlarge"
+AUTO_CONFIRM=false
 
 # Parse command line arguments
 parse_arguments() {
@@ -71,6 +70,10 @@ parse_arguments() {
             --gpu-node-type)
                 GPU_NODE_TYPE="$2"
                 shift 2
+                ;;
+            --yes|-y)
+                AUTO_CONFIRM=true
+                shift
                 ;;
             --help)
                 show_usage
@@ -175,6 +178,7 @@ build_and_push_image() {
         -t ${IMAGE_NAME}:${IMAGE_TAG} \
         -t ${IMAGE_NAME}:latest \
         --progress=plain \
+        #--no-cache \
         .
     
     # Tag for ECR
@@ -220,6 +224,7 @@ spec:
   mountOptions:
     - allow-delete
     - region ${AWS_REGION}
+    - prefix models/
   csi:
     driver: s3.csi.aws.com
     volumeHandle: ${S3_BUCKET}
@@ -279,28 +284,28 @@ deploy_comfyui() {
 # Wait for pod to be ready
 wait_for_pod() {
     print_step "Waiting for ComfyUI pod to be ready..."
-    
-    print_info "This may take 3-5 minutes for the pod to start..."
-    
-    # Wait for pod to exist
-    for i in {1..60}; do
+
+    print_info "This may take up to 30 minutes for the pod to start..."
+
+    # Wait for pod to exist (30 minutes = 900 iterations * 2 seconds)
+    for i in {1..900}; do
         if kubectl get pods -n comfyui-test -l app=comfyui-s3-test &> /dev/null; then
             break
         fi
         sleep 2
     done
-    
-    # Wait for pod to be ready (with timeout)
+
+    # Wait for pod to be ready (with timeout of 30 minutes = 1800 seconds)
     kubectl wait --for=condition=ready pod \
         -l app=comfyui-s3-test \
         -n comfyui-test \
-        --timeout=600s || {
+        --timeout=1800s || {
         print_error "Pod failed to become ready. Checking logs..."
         POD_NAME=$(kubectl get pods -n comfyui-test -l app=comfyui-s3-test -o jsonpath='{.items[0].metadata.name}')
         kubectl logs -n comfyui-test $POD_NAME --tail=50
         exit 1
     }
-    
+
     print_info "Pod is ready!"
 }
 
@@ -365,6 +370,7 @@ show_usage() {
     echo "  --skip-build              Skip Docker build, use existing latest image"
     echo "  --skip-s3-setup           Skip S3 PVC setup (assumes already configured)"
     echo "  --no-s3-mount             Deploy without S3 mount (for testing build only)"
+    echo "  --yes, -y                 Skip confirmation prompt (for automation/nohup)"
     echo "  --help                    Show this help message"
     echo ""
     echo "Examples:"
@@ -373,6 +379,10 @@ show_usage() {
     echo "  $0 --skip-build                       # Use existing image"
     echo "  $0 --bucket my-bucket                 # Use different S3 bucket"
     echo "  $0 --gpu-node-type g5.2xlarge         # Use larger GPU instance"
+    echo "  $0 --yes                              # Auto-confirm (for nohup)"
+    echo ""
+    echo "For background execution with nohup:"
+    echo "  nohup $0 --yes > deploy.log 2>&1 &"
     echo ""
     echo "Testing without S3 models:"
     echo "  $0 --no-s3-mount                      # Build and deploy, no models"
@@ -400,14 +410,26 @@ main() {
     check_prerequisites
     setup_environment
 
-    # Confirm with user
-    echo ""
-    print_warn "This will deploy ComfyUI-S3 to namespace 'comfyui-test'"
-    read -p "Continue? (y/N): " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Deployment cancelled."
-        exit 0
+    # Confirm with user unless auto-confirm
+    if [ "$AUTO_CONFIRM" = false ]; then
+        echo ""
+        print_warn "This will deploy ComfyUI-S3 to namespace 'comfyui-test'"
+        # Check if stdin is available (not running in nohup/background)
+        if [ -t 0 ]; then
+            read -p "Continue? (y/N): " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                print_info "Deployment cancelled."
+                exit 0
+            fi
+        else
+            print_warn "Running in non-interactive mode (stdin not available)"
+            print_warn "Use --yes or -y flag to auto-confirm, or run interactively"
+            print_error "Cannot proceed without confirmation"
+            exit 1
+        fi
+    else
+        print_info "Auto-confirm enabled, proceeding with deployment..."
     fi
 
     build_and_push_image

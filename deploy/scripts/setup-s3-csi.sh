@@ -13,9 +13,8 @@
 #   --region <region>         AWS region (default: us-west-2)
 #   --use-pod-identity        Use EKS Pod Identity (recommended, default)
 #   --use-irsa                Use IRSA (legacy method)
+#   --yes, -y                 Skip confirmation prompts (for automation/nohup)
 #   --help                    Show this help message
-
-set -e
 
 # Color codes for output
 RED='\033[0;31m'
@@ -41,6 +40,7 @@ CLUSTER_NAME=""
 S3_BUCKET=""
 AWS_REGION="us-west-2"
 USE_POD_IDENTITY=true  # Default to Pod Identity
+AUTO_CONFIRM=false
 
 # Parse command line arguments
 parse_arguments() {
@@ -64,6 +64,10 @@ parse_arguments() {
                 ;;
             --use-irsa)
                 USE_POD_IDENTITY=false
+                shift
+                ;;
+            --yes|-y)
+                AUTO_CONFIRM=true
                 shift
                 ;;
             --help)
@@ -526,11 +530,17 @@ main() {
     create_pv_pvc
 
     # Optional: Test S3 mount
-    echo ""
-    read -p "Do you want to test S3 mount with a test pod? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        test_s3_mount
+    if [ "$AUTO_CONFIRM" = false ] && [ -t 0 ]; then
+        echo ""
+        read -p "Do you want to test S3 mount with a test pod? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            test_s3_mount
+        fi
+    elif [ "$AUTO_CONFIRM" = true ]; then
+        print_info "Auto-confirm: Skipping S3 mount test"
+    else
+        print_info "Skipping S3 mount test (non-interactive mode)"
     fi
 
     display_summary

@@ -47,7 +47,12 @@ spec:
         # Image will be replaced by deploy script
         image: PLACEHOLDER_IMAGE
         imagePullPolicy: Always
-        
+
+        command:
+        - bash
+        - -lc
+        - python -u main.py --listen 0.0.0.0 --port 8188
+
         ports:
         - containerPort: 8188
           name: http
@@ -57,11 +62,11 @@ spec:
         resources:
           limits:
             nvidia.com/gpu: 1
-            memory: "24Gi"
+            memory: "48Gi"
             cpu: "6"
           requests:
             nvidia.com/gpu: 1
-            memory: "12Gi"
+            memory: "24Gi"
             cpu: "3"
         
         # Simplified health checks for faster startup

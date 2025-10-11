@@ -14,9 +14,8 @@
 #   --parallel <num>      Number of parallel downloads (default: 4)
 #   --skip-existing       Skip files that already exist in S3
 #   --dry-run             Show what would be uploaded without actually uploading
+#   --yes, -y             Skip confirmation prompt (useful for automation/nohup)
 #   --help                Show this help message
-
-set -e
 
 # Color codes for output
 RED='\033[0;31m'
@@ -49,6 +48,7 @@ TEMP_DIR="/tmp/comfyui-models"
 PARALLEL_DOWNLOADS=4
 SKIP_EXISTING=false
 DRY_RUN=false
+AUTO_CONFIRM=false
 
 # Check if required tools are installed
 check_prerequisites() {
@@ -98,6 +98,10 @@ parse_arguments() {
                 ;;
             --dry-run)
                 DRY_RUN=true
+                shift
+                ;;
+            --yes|-y)
+                AUTO_CONFIRM=true
                 shift
                 ;;
             --help)
@@ -167,43 +171,49 @@ download_model() {
     local url="$1"
     local local_path="$2"
     local s3_path="$3"
-    
+
     print_info "Processing: $(basename "$local_path")"
-    
+
     # Check if file already exists in S3 and skip if requested
     if [ "$SKIP_EXISTING" = true ] && check_s3_file_exists "$s3_path"; then
         print_info "Skipping $(basename "$local_path") - already exists in S3"
         return 0
     fi
-    
+
     # Check if file already exists locally
     if [ -f "$local_path" ]; then
         print_info "File already exists locally: $(basename "$local_path")"
     else
         print_info "Downloading: $(basename "$local_path")"
-        if ! wget -q --show-progress --timeout=300 --tries=3 "$url" -O "$local_path"; then
-            print_error "Failed to download: $url"
+        wget -q --show-progress --timeout=300 --tries=3 "$url" -O "$local_path"
+        local download_result=$?
+        if [ $download_result -ne 0 ]; then
+            print_error "Failed to download: $url (exit code: $download_result)"
             return 1
         fi
     fi
-    
+
     # Upload to S3 (unless dry run)
     if [ "$DRY_RUN" = true ]; then
         print_info "[DRY RUN] Would upload: $local_path -> s3://${S3_BUCKET}/${s3_path}"
     else
         print_info "Uploading to S3: $(basename "$local_path")"
-        if ! aws s3 cp "$local_path" "s3://${S3_BUCKET}/${s3_path}" --region "$AWS_REGION"; then
-            print_error "Failed to upload: $local_path"
+        aws s3 cp "$local_path" "s3://${S3_BUCKET}/${s3_path}" --region "$AWS_REGION"
+        local upload_result=$?
+        if [ $upload_result -ne 0 ]; then
+            print_error "Failed to upload: $local_path (exit code: $upload_result)"
             return 1
         fi
+        print_debug "Successfully uploaded: $(basename "$local_path")"
     fi
-    
-    # Clean up local file to save space
+
+    # Clean up local file to save space (only the individual file, not the directory)
     if [ "$DRY_RUN" = false ] && [ -f "$local_path" ]; then
-        rm "$local_path"
+        rm -f "$local_path" 2>/dev/null || print_warn "Failed to clean up local file: $local_path"
         print_debug "Cleaned up local file: $local_path"
     fi
-    
+
+    print_debug "download_model completed successfully for: $(basename "$local_path")"
     return 0
 }
 
@@ -221,92 +231,91 @@ define_models() {
     # Text Encoders
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
-    S3_PATHS+=("models/wan/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
-    
+    S3_PATHS+=("models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
+
+    MODEL_URLS+=("https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/text_encoders/t5xxl_fp8_e4m3fn.safetensors")
+    S3_PATHS+=("models/text_encoders/t5xxl_fp8_e4m3fn.safetensors")
+
     # CLIP Models
     MODEL_URLS+=("https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/open-clip-xlm-roberta-large-vit-huge-14_fp16.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/clip/open-clip-xlm-roberta-large-vit-huge-14_fp16.safetensors")
-    S3_PATHS+=("models/wan/open-clip-xlm-roberta-large-vit-huge-14_fp16.safetensors")
-    
+    S3_PATHS+=("models/clip/open-clip-xlm-roberta-large-vit-huge-14_fp16.safetensors")
+
     MODEL_URLS+=("https://huggingface.co/openai/clip-vit-large-patch14/resolve/main/model.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/clip/clip_l.safetensors")
-    S3_PATHS+=("models/flux/clip_l.safetensors")
-
-    # T5 Text Encoder for FLUX
-    MODEL_URLS+=("https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors")
-    LOCAL_PATHS+=("$TEMP_DIR/models/text_encoders/t5xxl_fp8_e4m3fn.safetensors")
-    S3_PATHS+=("models/flux/t5xxl_fp8_e4m3fn.safetensors")
+    S3_PATHS+=("models/clip/clip_l.safetensors")
 
     # Diffusion Models
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan_2.1_unet_fp8_e4m3fn_scaled.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan_2.1_unet_fp8_e4m3fn_scaled.safetensors")
-    S3_PATHS+=("models/wan/wan_2.1_unet_fp8_e4m3fn_scaled.safetensors")
+    S3_PATHS+=("models/diffusion_models/wan_2.1_unet_fp8_e4m3fn_scaled.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_unet_fp8_e4m3fn_scaled.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan2.2_unet_fp8_e4m3fn_scaled.safetensors")
-    S3_PATHS+=("models/wan/wan2.2_unet_fp8_e4m3fn_scaled.safetensors")
+    S3_PATHS+=("models/diffusion_models/wan2.2_unet_fp8_e4m3fn_scaled.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/flux1-kontext-dev_ComfyUI/resolve/main/split_files/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors")
-    S3_PATHS+=("models/flux/flux1-dev-kontext_fp8_scaled.safetensors")
+    S3_PATHS+=("models/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors")
 
-    MODEL_URLS+=("https://huggingface.co/Comfy-Org/flux1-dev/resolve/main/flux1-dev-fp8-unet.safetensors")
-    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/flux1-dev-fp8-unet.safetensors")
-    S3_PATHS+=("models/flux/flux1-dev-fp8-unet.safetensors")
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/flux1-dev/resolve/main/flux1-dev-fp8.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/flux1-dev-fp8.safetensors")
+    S3_PATHS+=("models/diffusion_models/flux1-dev-fp8.safetensors")
 
-    MODEL_URLS+=("https://huggingface.co/Qwen/Qwen-Image-Edit/resolve/main/qwen_image_edit_2509_fp8_e4m3fn.safetensors")
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors")
-    S3_PATHS+=("models/flux/qwen_image_edit_2509_fp8_e4m3fn.safetensors")
+    S3_PATHS+=("models/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors")
 
     # VAE Models
     MODEL_URLS+=("https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/vae/Wan2_1_VAE_bf16.safetensors")
-    S3_PATHS+=("models/wan/Wan2_1_VAE_bf16.safetensors")
+    S3_PATHS+=("models/vae/Wan2_1_VAE_bf16.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/vae/wan2.2_vae.safetensors")
-    S3_PATHS+=("models/wan/wan2.2_vae.safetensors")
+    S3_PATHS+=("models/vae/wan2.2_vae.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/vae/wan_2.1_vae.safetensors")
-    S3_PATHS+=("models/wan/wan_2.1_vae.safetensors")
+    S3_PATHS+=("models/vae/wan_2.1_vae.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/alibaba-pai/Wan2.2-Fun-A14B-InP/resolve/main/Wan2.1_VAE.pth")
     LOCAL_PATHS+=("$TEMP_DIR/models/vae/Wan2_1_VAE_fp32.safetensors")
-    S3_PATHS+=("models/wan/Wan2_1_VAE_fp32.safetensors")
+    S3_PATHS+=("models/vae/Wan2_1_VAE_fp32.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/modelzpalace/ae.safetensors/resolve/main/ae.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/vae/ae.safetensors")
-    S3_PATHS+=("models/flux/ae.safetensors")
+    S3_PATHS+=("models/vae/ae.safetensors")
 
-    MODEL_URLS+=("https://huggingface.co/Qwen/Qwen-Image/resolve/main/qwen_image_vae.safetensors")
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/vae/qwen_image_vae.safetensors")
-    S3_PATHS+=("models/flux/qwen_image_vae.safetensors")
+    S3_PATHS+=("models/vae/qwen_image_vae.safetensors")
 
     # LoRA Models
-    MODEL_URLS+=("https://huggingface.co/Qwen/Qwen-Image-Lightning/resolve/main/Qwen-Image-Lightning-8steps-V1.1.safetensors")
+    MODEL_URLS+=("https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Lightning-8steps-V1.1.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/Qwen-Image-Lightning-8steps-V1.1.safetensors")
-    S3_PATHS+=("models/flux/Qwen-Image-Lightning-8steps-V1.1.safetensors")
+    S3_PATHS+=("models/loras/Qwen-Image-Lightning-8steps-V1.1.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-FusionX/resolve/main/Wan2.1_T2V_14B_FusionX_LoRA.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/Wan2.1_T2V_14B_FusionX_LoRA.safetensors")
-    S3_PATHS+=("models/wan/Wan2.1_T2V_14B_FusionX_LoRA.safetensors")
+    S3_PATHS+=("models/loras/Wan2.1_T2V_14B_FusionX_LoRA.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/Wan2.2_I2V_14B_lightx2v_lora_high.safetensors")
-    S3_PATHS+=("models/wan/Wan2.2_I2V_14B_lightx2v_lora_high.safetensors")
+    S3_PATHS+=("models/loras/Wan2.2_I2V_14B_lightx2v_lora_high.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/Wan2.2_I2V_14B_lightx2v_lora_low.safetensors")
-    S3_PATHS+=("models/wan/Wan2.2_I2V_14B_lightx2v_lora_low.safetensors")
+    S3_PATHS+=("models/loras/Wan2.2_I2V_14B_lightx2v_lora_low.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors")
-    S3_PATHS+=("models/wan/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors")
+    S3_PATHS+=("models/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors")
-    S3_PATHS+=("models/wan/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors")
+    S3_PATHS+=("models/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors")
 }
 
 # Process all models
@@ -347,15 +356,27 @@ EOF
 
         for i in "${!MODEL_URLS[@]}"; do
             local current=$((i + 1))
+            print_info "========================================="
             print_info "Processing model $current/$total_models"
+            print_info "========================================="
 
-            if download_model "${MODEL_URLS[$i]}" "${LOCAL_PATHS[$i]}" "${S3_PATHS[$i]}"; then
+            download_model "${MODEL_URLS[$i]}" "${LOCAL_PATHS[$i]}" "${S3_PATHS[$i]}"
+            local result=$?
+
+            if [ $result -eq 0 ]; then
                 ((successful_uploads++))
+                print_info "✓ Model $current/$total_models completed successfully"
             else
                 ((failed_downloads++))
-                print_error "Failed to process model: $(basename "${LOCAL_PATHS[$i]}")"
+                print_error "✗ Failed to process model: $(basename "${LOCAL_PATHS[$i]}")"
             fi
+
+            print_debug "Continuing to next model..."
         done
+
+        print_info "========================================="
+        print_info "All models processed"
+        print_info "========================================="
     fi
 
     print_info "Model processing completed."
@@ -411,12 +432,13 @@ display_summary() {
     echo ""
 }
 
-# Cleanup function
+# Cleanup function - only called at the very end
 cleanup() {
-    print_info "Cleaning up temporary files..."
+    # Only cleanup if we're actually exiting
     if [ -d "$TEMP_DIR" ] && [ "$TEMP_DIR" != "/" ]; then
-        rm -rf "$TEMP_DIR"
-        print_info "Temporary directory cleaned up: $TEMP_DIR"
+        print_info "Cleaning up temporary directory: $TEMP_DIR"
+        rm -rf "$TEMP_DIR" 2>/dev/null || true
+        print_info "Temporary directory cleaned up"
     fi
 }
 
@@ -433,6 +455,7 @@ show_usage() {
     echo "  --parallel <num>      Number of parallel downloads (default: 4)"
     echo "  --skip-existing       Skip files that already exist in S3"
     echo "  --dry-run             Show what would be uploaded without actually uploading"
+    echo "  --yes, -y             Skip confirmation prompt (for automation/nohup)"
     echo "  --help                Show this help message"
     echo ""
     echo "Examples:"
@@ -440,6 +463,10 @@ show_usage() {
     echo "  $0 --bucket my-bucket --skip-existing            # Skip existing files"
     echo "  $0 --bucket my-bucket --dry-run                  # Preview what would be uploaded"
     echo "  $0 --bucket my-bucket --parallel 8               # Use 8 parallel downloads"
+    echo "  $0 --bucket my-bucket --yes                      # Auto-confirm (for nohup)"
+    echo ""
+    echo "For background execution with nohup:"
+    echo "  nohup $0 --bucket my-bucket --yes > upload.log 2>&1 &"
     echo ""
     echo "Note: This script will download ~50-100GB of models and upload them to S3."
     echo "      Make sure you have sufficient disk space and network bandwidth."
@@ -461,15 +488,25 @@ main() {
     define_models
     display_summary
 
-    # Ask for confirmation unless dry run
-    if [ "$DRY_RUN" = false ]; then
+    # Ask for confirmation unless dry run or auto-confirm
+    if [ "$DRY_RUN" = false ] && [ "$AUTO_CONFIRM" = false ]; then
         echo ""
-        read -p "Do you want to proceed with downloading and uploading ${#MODEL_URLS[@]} models? (y/N): " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Operation cancelled by user."
-            exit 0
+        # Check if stdin is available (not running in nohup/background)
+        if [ -t 0 ]; then
+            read -p "Do you want to proceed with downloading and uploading ${#MODEL_URLS[@]} models? (y/N): " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                print_info "Operation cancelled by user."
+                exit 0
+            fi
+        else
+            print_warn "Running in non-interactive mode (stdin not available)"
+            print_warn "Use --yes or -y flag to auto-confirm, or run interactively"
+            print_error "Cannot proceed without confirmation"
+            exit 1
         fi
+    elif [ "$AUTO_CONFIRM" = true ]; then
+        print_info "Auto-confirm enabled, proceeding with upload..."
     fi
 
     # Process all models

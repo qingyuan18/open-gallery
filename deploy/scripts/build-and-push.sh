@@ -12,8 +12,6 @@
 #   --region <region>     AWS region (default: us-west-2)
 #   --help                Show this help message
 
-set -e
-
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

@@ -19,14 +19,18 @@ RUN mkdir -p /opt/program/custom_nodes/
 RUN chmod -R 777 /opt/program
 
 # Install git and basic dependencies
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir fastapi uvicorn sagemaker
-RUN pip install sagemaker-ssh-helper
+RUN apt-get update && apt-get install -y ffmpeg git
+#RUN pip install --no-cache-dir fastapi uvicorn sagemaker
+#RUN pip install sagemaker-ssh-helper
 RUN curl -L https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz | tar -xz && mv s5cmd /opt/program/
 
 ENV PYTHONUNBUFFERED=TRUE
 ENV PYTHONDONTWRITEBYTECODE=TRUE
 ENV PATH="/opt/program:${PATH}"
+# Compile CUDA extensions for NVIDIA L40S (Ada, SM 8.9) at build time
+# This avoids GPU detection at build and ensures wheels work in k8s pods
+ENV export TORCH_CUDA_ARCH_LIST="8.9"
+ENV export FORCE_CUDA=1
 
 ####install ComfyUI
 # Clone ComfyUI from official repository
@@ -38,7 +42,6 @@ RUN git clone https://github.com/comfyanonymous/ComfyUI.git /tmp/comfyui && \
 RUN pip install -r /opt/program/requirements.txt
 
 # Install core dependencies
-RUN pip install -U xformers==0.0.27 --no-deps
 RUN pip install scikit-image
 RUN pip install imageio_ffmpeg
 RUN pip install wget
@@ -47,8 +50,6 @@ RUN pip install blend_modes
 RUN pip install transparent_background
 RUN pip install GitPython
 
-# Install system packages
-RUN apt-get update && apt-get install -y ffmpeg libgl1-mesa-glx
 
 ###############################################################################
 # INSTALL CUSTOM NODES SECTION
@@ -101,39 +102,25 @@ RUN git clone https://github.com/qingyuan18/comfyui-llm-node-for-amazon-bedrock.
 ###############################################################################
 
 #### Install http/socket client (for uvicorn web server)
-RUN pip3 install websocket-client
+#RUN pip install websocket-client
 # Pin pydantic and typing_extensions to avoid ImportError: 'Sentinel'
-RUN pip3 install "pydantic>=2.7,<3" "typing_extensions>=4.12.2"
-RUN pip install loguru
-RUN pip install typer_config
-RUN pip install --no-deps diffusers
-RUN pip install omegaconf
+RUN pip install "pydantic>=2.7,<3" "typing_extensions>=4.12.2"
+#RUN pip install --no-deps diffusers
+
 
 #### Install layer style dependencies
-RUN mkdir -p /opt/program/web/extensions/dzNodes
-RUN pip install --no-cache-dir --force-reinstall pillow
-RUN pip install --no-deps protobuf==3.20.3
-RUN pip install --no-deps mediapipe
-RUN pip install --no-deps segment_anything
-RUN pip install addict
-RUN pip install yapf
-RUN pip install openai
-
-#### Install PaddleOCR dependencies
-RUN pip install paddlepaddle-gpu==2.6.2
-RUN pip install paddleocr==2.10.0
+#RUN pip install addict
+#RUN pip install yapf
+#RUN pip install openai
 
 #### Upgrade torch/torchvision/cuda dependencies FIRST (before OpenCV)
-RUN pip install -U --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+#RUN pip install -U --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
-# Compile CUDA extensions for NVIDIA L40S (Ada, SM 8.9) at build time
-# This avoids GPU detection at build and ensures wheels work in k8s pods
-ENV TORCH_CUDA_ARCH_LIST="8.9"
-ENV FORCE_CUDA=1
+
 
 #### Install SageAttention (optional performance optimization)
 # Use non-editable install to avoid pip 25.0 deprecation warning
-RUN git clone https://github.com/thu-ml/SageAttention.git /tmp/SageAttention && \
+RUN export TORCH_CUDA_ARCH_LIST="8.9" && export FORCE_CUDA=1 && git clone https://github.com/thu-ml/SageAttention.git /tmp/SageAttention && \
     cd /tmp/SageAttention && \
     git checkout 2aecfa89c777ec46c4eaaab66082f188a1e00ae4 && \
     pip install --no-build-isolation . && \
@@ -142,8 +129,8 @@ RUN git clone https://github.com/thu-ml/SageAttention.git /tmp/SageAttention && 
 # Install OpenCV compatible with NumPy 2.x LAST to avoid being overwritten
 # (4.10.0+ supports NumPy 2.x)
 # Uninstall any existing opencv packages first to avoid conflicts
-RUN pip uninstall -y opencv opencv-python opencv-python-headless opencv-contrib-python || true
-RUN pip install --no-cache-dir --force-reinstall opencv-python-headless==4.12.0.88
+RUN pip uninstall -y opencv || true
+#RUN pip install --no-cache-dir --force-reinstall opencv-python-headless==4.12.0.88
 
 
 

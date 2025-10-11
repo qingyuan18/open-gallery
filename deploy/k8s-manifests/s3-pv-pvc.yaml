@@ -11,6 +11,7 @@ spec:
   mountOptions:
     - allow-delete
     - region us-west-2
+    - prefix models/
   csi:
     driver: s3.csi.aws.com
     volumeHandle: salunchbucket  # Your S3 bucket name

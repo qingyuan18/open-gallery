@@ -8,8 +8,6 @@
 # 3. Automatic IRSA configuration through add-on
 # 4. HyperPod-specific IAM permissions
 
-set -e
-
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -39,6 +37,7 @@ CLUSTER_NAME=""
 AWS_REGION="us-west-2"
 S3_BUCKET=""
 ADDON_VERSION="v1.10.0-eksbuild.1"  # Latest stable version for HyperPod
+AUTO_CONFIRM=false
 
 # Parse command line arguments
 parse_arguments() {
@@ -59,6 +58,10 @@ parse_arguments() {
             --addon-version)
                 ADDON_VERSION="$2"
                 shift 2
+                ;;
+            --yes|-y)
+                AUTO_CONFIRM=true
+                shift
                 ;;
             --help)
                 show_usage
@@ -506,11 +509,17 @@ main() {
     create_pv_pvc
 
     # Optional: Test S3 mount
-    echo ""
-    read -p "Do you want to test S3 mount with a test pod? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        test_s3_mount
+    if [ "$AUTO_CONFIRM" = false ] && [ -t 0 ]; then
+        echo ""
+        read -p "Do you want to test S3 mount with a test pod? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            test_s3_mount
+        fi
+    elif [ "$AUTO_CONFIRM" = true ]; then
+        print_info "Auto-confirm: Skipping S3 mount test"
+    else
+        print_info "Skipping S3 mount test (non-interactive mode)"
     fi
 
     display_summary

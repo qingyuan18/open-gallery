@@ -213,7 +213,8 @@ RUN git clone https://github.com/qingyuan18/comfyui-llm-node-for-amazon-bedrock.
 
 #### Install http/socket client (for uvicorn web server)
 RUN pip3 install websocket-client
-RUN pip3 install pydantic
+# Pin pydantic and typing_extensions to avoid ImportError: 'Sentinel'
+RUN pip3 install "pydantic>=2.7,<3" "typing_extensions>=4.12.2"
 RUN pip install loguru
 RUN pip install typer_config
 RUN pip install --no-deps diffusers
@@ -222,8 +223,6 @@ RUN pip install omegaconf
 #### Install layer style dependencies
 RUN mkdir -p /opt/program/web/extensions/dzNodes
 RUN pip install --no-cache-dir --force-reinstall pillow
-RUN pip install opencv-fixer==0.2.5
-RUN python -c "from opencv_fixer import AutoFix; AutoFix()"
 RUN pip install --no-deps protobuf==3.20.3
 RUN pip install --no-deps mediapipe
 RUN pip install --no-deps segment_anything
@@ -235,14 +234,21 @@ RUN pip install openai
 RUN pip install paddlepaddle-gpu==2.6.2
 RUN pip install paddleocr==2.10.0
 
+#### Upgrade torch/torchvision/cuda dependencies FIRST (before OpenCV)
+RUN pip install -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
 #### Install SageAttention (optional performance optimization)
+# Use non-editable install to avoid pip 25.0 deprecation warning
 RUN git clone https://github.com/thu-ml/SageAttention.git /tmp/SageAttention && \
     cd /tmp/SageAttention && \
-    pip install -e . && \
+    pip install --no-build-isolation . && \
     cd / && rm -rf /tmp/SageAttention
 
-#### Upgrade torch/torchvision/cuda dependencies
-RUN pip install -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+# Install OpenCV compatible with NumPy 2.x LAST to avoid being overwritten
+# (4.10.0+ supports NumPy 2.x)
+# Uninstall any existing opencv packages first to avoid conflicts
+RUN pip uninstall -y opencv opencv-python opencv-python-headless opencv-contrib-python || true
+RUN pip install --no-cache-dir --force-reinstall opencv-python-headless==4.12.0.88
 
 ###############################################################################
 # S3 MODEL MOUNTING SUPPORT (Optional)

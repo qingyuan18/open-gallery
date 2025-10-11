@@ -70,17 +70,21 @@ cd deploy
 ### 步骤 3: 部署 ComfyUI-S3
 
 ```bash
-# 完整部署（构建镜像 + 部署）
-./scripts/deploy-comfyui-s3-standalone.sh
+## open-gallery根目录下执行：
+# 完整部署（构建镜像 + 部署， 先不mount s3模型）
+bash deploy/scripts/deploy-comfyui-s3-standalone.sh --no-s3-mount 
+
+## 完整构建（重新build）
+bash deploy/scripts/deploy-comfyui-s3-standalone.sh   --bucket comfyui-models-bucket-687912291502  --gpu-node-type ml.g6e.4xlarge --yes
 
 # 使用已有镜像（跳过构建）
-./scripts/deploy-comfyui-s3-standalone.sh --no-s3-mount
+bash deploy/scripts/deploy-comfyui-s3-standalone.sh --skip-build  --bucket comfyui-models-bucket-687912291502  --gpu-node-type ml.g6e.4xlarge --yes
 
 # 自定义 S3 bucket
-./scripts/deploy-comfyui-s3-standalone.sh --bucket comfyui-models-bucket-687912291502
+bash deploy/scripts/deploy-comfyui-s3-standalone.sh --bucket comfyui-models-bucket-687912291502
 
 # 使用更大的 GPU 实例
-./scripts/deploy-comfyui-s3-standalone.sh --gpu-node-type ml.g6e.2xlarge
+bash deploy/scripts/deploy-comfyui-s3-standalone.sh --gpu-node-type ml.g6e.2xlarge
 ```
 
 ### 步骤 4: 访问 ComfyUI

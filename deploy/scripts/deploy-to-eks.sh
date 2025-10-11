@@ -9,9 +9,8 @@
 # Options:
 #   --comfyui-mode <mode>  ComfyUI deployment mode: embedded, s3 (default: embedded)
 #   --skip-comfyui         Skip ComfyUI deployment (deploy only open-gallery)
+#   --yes, -y              Skip confirmation prompts (for automation/nohup)
 #   --help                 Show this help message
-
-set -e
 
 # Color codes for output
 RED='\033[0;31m'
@@ -59,6 +58,7 @@ check_prerequisites() {
 parse_arguments() {
     COMFYUI_MODE="embedded"
     SKIP_COMFYUI=false
+    AUTO_CONFIRM=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -68,6 +68,10 @@ parse_arguments() {
                 ;;
             --skip-comfyui)
                 SKIP_COMFYUI=true
+                shift
+                ;;
+            --yes|-y)
+                AUTO_CONFIRM=true
                 shift
                 ;;
             --help)
@@ -212,12 +216,16 @@ wait_for_alb() {
 
 # Optional: Deploy HPA
 deploy_hpa() {
-    read -p "Do you want to deploy Horizontal Pod Autoscaler? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Deploying HPA..."
-        kubectl apply -f comfyui-hpa.yaml
-        print_info "HPA deployed successfully."
+    if [ "$AUTO_CONFIRM" = false ] && [ -t 0 ]; then
+        read -p "Do you want to deploy Horizontal Pod Autoscaler? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Deploying HPA..."
+            kubectl apply -f comfyui-hpa.yaml
+            print_info "HPA deployed successfully."
+        fi
+    elif [ "$AUTO_CONFIRM" = true ]; then
+        print_info "Auto-confirm: Skipping HPA deployment"
     else
         print_info "Skipping HPA deployment."
     fi
@@ -258,25 +266,29 @@ verify_deployment() {
 
 # Display logs
 display_logs() {
-    read -p "Do you want to view pod logs? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Which logs do you want to view?"
-        echo "1) Open Gallery"
-        if [ "$SKIP_COMFYUI" = false ]; then
-            echo "2) ComfyUI"
-        fi
-        read -p "Enter choice: " choice
+    if [ "$AUTO_CONFIRM" = false ] && [ -t 0 ]; then
+        read -p "Do you want to view pod logs? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Which logs do you want to view?"
+            echo "1) Open Gallery"
+            if [ "$SKIP_COMFYUI" = false ]; then
+                echo "2) ComfyUI"
+            fi
+            read -p "Enter choice: " choice
 
-        if [ "$choice" == "1" ]; then
-            POD_NAME=$(kubectl get pods -l app=open-gallery -o jsonpath='{.items[0].metadata.name}')
-            print_info "Displaying logs for Open Gallery pod: $POD_NAME"
-            kubectl logs -f $POD_NAME
-        elif [ "$choice" == "2" ] && [ "$SKIP_COMFYUI" = false ]; then
-            POD_NAME=$(kubectl get pods -l app=comfyui -o jsonpath='{.items[0].metadata.name}')
-            print_info "Displaying logs for ComfyUI pod: $POD_NAME"
-            kubectl logs -f $POD_NAME
+            if [ "$choice" == "1" ]; then
+                POD_NAME=$(kubectl get pods -l app=open-gallery -o jsonpath='{.items[0].metadata.name}')
+                print_info "Displaying logs for Open Gallery pod: $POD_NAME"
+                kubectl logs -f $POD_NAME
+            elif [ "$choice" == "2" ] && [ "$SKIP_COMFYUI" = false ]; then
+                POD_NAME=$(kubectl get pods -l app=comfyui -o jsonpath='{.items[0].metadata.name}')
+                print_info "Displaying logs for ComfyUI pod: $POD_NAME"
+                kubectl logs -f $POD_NAME
+            fi
         fi
+    else
+        print_info "Skipping log display (non-interactive mode or auto-confirm)"
     fi
 }
 
