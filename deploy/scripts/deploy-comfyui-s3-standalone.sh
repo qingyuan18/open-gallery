@@ -178,7 +178,6 @@ build_and_push_image() {
         -t ${IMAGE_NAME}:${IMAGE_TAG} \
         -t ${IMAGE_NAME}:latest \
         --progress=plain \
-        #--no-cache \
         .
     
     # Tag for ECR
@@ -208,7 +207,10 @@ setup_s3_pvc() {
     fi
 
     print_step "Setting up S3 PVC for models..."
-    
+
+    # Ensure namespace exists first
+    kubectl create namespace comfyui-test --dry-run=client -o yaml | kubectl apply -f -
+
     # Create PV and PVC for test namespace
     cat > /tmp/comfyui-s3-test-pvc.yaml << EOF
 ---
@@ -245,11 +247,24 @@ spec:
       storage: 1000Gi
   volumeName: comfyui-models-pv-test
 EOF
-    
+
     kubectl apply -f /tmp/comfyui-s3-test-pvc.yaml
     rm /tmp/comfyui-s3-test-pvc.yaml
-    
-    print_info "S3 PVC created successfully"
+
+    # Wait for PVC to be bound
+    print_info "Waiting for PVC to be bound..."
+    for i in {1..30}; do
+        PVC_STATUS=$(kubectl get pvc -n comfyui-test comfyui-models-pvc -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+        if [ "$PVC_STATUS" = "Bound" ]; then
+            print_info "PVC bound successfully"
+            return 0
+        fi
+        echo -n "."
+        sleep 2
+    done
+
+    print_warn "PVC not bound yet, but continuing deployment..."
+    print_info "Check PVC status with: kubectl get pvc -n comfyui-test"
 }
 
 # Deploy ComfyUI-S3

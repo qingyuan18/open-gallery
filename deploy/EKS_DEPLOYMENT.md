@@ -14,8 +14,7 @@ deploy/
 │
 ├── Dockerfiles
 │   ├── open-gallery.dockerfile            # Open Gallery 应用镜像
-│   ├── comfyui-embedded.dockerfile        # ComfyUI (模型嵌入)
-│   └── comfyui-s3.dockerfile              # ComfyUI (S3 挂载)
+│   └── comfyui-s3.dockerfile              # ComfyUI (S3 挂载模式)
 │
 ├── k8s-manifests/                         # Kubernetes 配置文件
 │   ├── open-gallery-deployment.yaml       # Open Gallery 部署
@@ -24,7 +23,6 @@ deploy/
 │   ├── open-gallery-configmap.yaml        # Open Gallery 配置
 │   │
 │   ├── comfyui-deployment.yaml            # ComfyUI 部署 (S3 模式)
-│   ├── comfyui-deployment-embedded.yaml   # ComfyUI 部署 (Embedded 模式)
 │   ├── comfyui-s3-standalone.yaml         # ComfyUI-S3 独立测试部署
 │   ├── comfyui-service.yaml               # ComfyUI 服务 (内部)
 │   ├── comfyui-configmap.yaml             # ComfyUI 配置
@@ -35,7 +33,7 @@ deploy/
 │
 └── scripts/                               # 部署脚本
     ├── build-and-push.sh                  # 构建和推送镜像
-    ├── deploy-to-eks.sh                   # 部署到 EKS (完整部署)
+    ├── deploy-to-eks.sh                   # 部署到 EKS (完整部署 - S3 模式)
     ├── deploy-comfyui-s3-standalone.sh    # ComfyUI-S3 独立测试部署
     ├── setup-s3-csi.sh                    # S3 CSI 设置 (支持 Pod Identity 和 IRSA)
     └── upload-models-to-s3.sh             # 上传模型到 S3
@@ -65,25 +63,20 @@ Open Gallery Service (ClusterIP:80)
 **关键特性:**
 - ✅ Open Gallery 通过 ALB 对外暴露
 - ✅ ComfyUI 仅作为内部服务，通过 ClusterIP 访问
-- ✅ 支持两种 ComfyUI 部署模式：Embedded (模型打包) 和 S3 (模型挂载)
+- ✅ ComfyUI 使用 S3 模式：模型从 S3 挂载（生产推荐）
 
 ---
 
-## 📦 部署模式对比
+## 📦 ComfyUI 部署模式
 
-### Embedded 模式 (推荐用于开发/测试)
+本部署使用 **S3 模式**（生产推荐）：
 
-- 模型打包在 Docker 镜像中
-- 镜像大小: ~50-100GB
-- 构建时间: 30-60 分钟
-- 无需 S3 配置
-
-### S3 模式 (推荐用于生产环境)
-
-- 模型从 S3 挂载
-- 镜像大小: ~5-10GB
-- 构建时间: 5-10 分钟
-- 需要 S3 CSI Driver
+- ✅ 模型从 S3 挂载（使用 AWS Mountpoint for S3 CSI Driver）
+- ✅ 镜像大小: ~5-10GB（快速构建和部署）
+- ✅ 构建时间: 5-10 分钟
+- ✅ 模型共享：多个 Pod 可共享同一 S3 bucket
+- ✅ 模型更新：无需重新构建镜像，直接更新 S3 即可
+- ⚠️ 需要 S3 CSI Driver 和正确的 IAM 权限配置
 
 ---
 
@@ -116,7 +109,7 @@ kubectl get deployment -n kube-system aws-load-balancer-controller
 
 ## 🚀 快速开始
 
-### 方式零: ComfyUI-S3 独立测试 (最快速)
+### 方式一: ComfyUI-S3 独立测试 (最快速)
 
 **仅测试 ComfyUI-S3，不包含 Open Gallery**
 
@@ -136,28 +129,11 @@ open http://localhost:8188
 
 ---
 
-### 方式一: Embedded 模式 (最简单)
-
-```bash
-# 1. 设置环境变量
-export AWS_REGION=us-west-2
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
-# 2. 构建和推送镜像
-cd deploy
-./scripts/build-and-push.sh
-
-# 3. 部署到 EKS
-./scripts/deploy-to-eks.sh
-
-# 4. 获取访问 URL
-kubectl get ingress open-gallery-ingress
-```
-
-### 方式二: S3 模式 (生产推荐)
+### 方式二: 完整部署 (Open Gallery + ComfyUI S3)
 
 ```bash
 # 1. 设置 S3 CSI Driver (使用 Pod Identity)
+cd deploy
 ./scripts/setup-s3-csi.sh \
     --cluster-name your-cluster-name \
     --bucket comfyui-models-bucket-687912291502 \
@@ -166,14 +142,15 @@ kubectl get ingress open-gallery-ingress
 # 2. 上传模型到 S3
 ./scripts/upload-models-to-s3.sh --bucket comfyui-models-bucket-687912291502
 
-# 3. 更新 k8s-manifests/s3-pv-pvc.yaml 中的 bucketName
-
-# 4. 构建和推送镜像
+# 3. 构建和推送镜像
 ./scripts/build-and-push.sh --app comfyui-s3
 ./scripts/build-and-push.sh --app open-gallery
 
-# 5. 部署到 EKS (S3 模式)
-./scripts/deploy-to-eks.sh --comfyui-mode s3
+# 4. 部署 S3 PV/PVC
+kubectl apply -f k8s-manifests/s3-pv-pvc.yaml
+
+# 5. 部署到 EKS
+./scripts/deploy-to-eks.sh
 
 # 6. 获取访问 URL
 kubectl get ingress open-gallery-ingress
@@ -193,16 +170,13 @@ cd deploy
 
 # 或仅构建特定镜像
 ./scripts/build-and-push.sh --app open-gallery
-./scripts/build-and-push.sh --app comfyui-embedded
 ./scripts/build-and-push.sh --app comfyui-s3
 
 # 使用自定义标签
 ./scripts/build-and-push.sh --app open-gallery --tag v1.0.0
 ```
 
-### 步骤 2: (可选) 配置 S3 模型存储
-
-**仅在使用 S3 模式时需要**
+### 步骤 2: 配置 S3 模型存储
 
 #### S3 CSI Driver 安装方式
 
@@ -252,20 +226,33 @@ aws s3 mb s3://your-comfyui-models-bucket
     --dry-run  # 预览要上传的文件
 ```
 
-### 步骤 3: 部署到 EKS
+### 步骤 3: 部署 S3 PV/PVC
 
 ```bash
-# Embedded 模式 (默认)
-./scripts/deploy-to-eks.sh
+# 确保 s3-pv-pvc.yaml 中的 bucket 名称正确
+# bucketName: comfyui-models-bucket-687912291502
 
-# S3 模式
-./scripts/deploy-to-eks.sh --comfyui-mode s3
+kubectl apply -f k8s-manifests/s3-pv-pvc.yaml
 
-# 仅部署 Open Gallery
-./scripts/deploy-to-eks.sh --skip-comfyui
+# 验证 PV/PVC 状态
+kubectl get pv comfyui-models-pv
+kubectl get pvc comfyui-models-pvc
 ```
 
-### 步骤 4: 验证部署
+### 步骤 4: 部署到 EKS
+
+```bash
+# 完整部署 (Open Gallery + ComfyUI S3)
+./scripts/deploy-to-eks.sh
+
+# 仅部署 Open Gallery (跳过 ComfyUI)
+./scripts/deploy-to-eks.sh --skip-comfyui
+
+# 自动确认模式 (用于自动化脚本)
+./scripts/deploy-to-eks.sh --yes
+```
+
+### 步骤 5: 验证部署
 
 ```bash
 # 查看所有 Pods
@@ -486,12 +473,11 @@ kubectl delete -f k8s-manifests/comfyui-service.yaml
 kubectl delete -f k8s-manifests/open-gallery-configmap.yaml
 kubectl delete -f k8s-manifests/comfyui-configmap.yaml
 
-# 删除 S3 资源 (如果使用)
+# 删除 S3 PV/PVC
 kubectl delete -f k8s-manifests/s3-pv-pvc.yaml
 
 # 删除 ECR 镜像
 aws ecr delete-repository --repository-name open-gallery --force
-aws ecr delete-repository --repository-name comfyui-embedded --force
 aws ecr delete-repository --repository-name comfyui-s3 --force
 ```
 

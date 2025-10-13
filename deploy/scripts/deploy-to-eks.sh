@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # Open Gallery + ComfyUI EKS Deployment Script
-# This script deploys Open Gallery and ComfyUI to an existing EKS cluster
+# This script deploys Open Gallery and ComfyUI (S3 mode) to an existing EKS cluster
 #
 # Usage:
 #   ./deploy-to-eks.sh [OPTIONS]
 #
 # Options:
-#   --comfyui-mode <mode>  ComfyUI deployment mode: embedded, s3 (default: embedded)
 #   --skip-comfyui         Skip ComfyUI deployment (deploy only open-gallery)
 #   --yes, -y              Skip confirmation prompts (for automation/nohup)
 #   --help                 Show this help message
@@ -56,16 +55,11 @@ check_prerequisites() {
 
 # Parse command line arguments
 parse_arguments() {
-    COMFYUI_MODE="embedded"
     SKIP_COMFYUI=false
     AUTO_CONFIRM=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --comfyui-mode)
-                COMFYUI_MODE="$2"
-                shift 2
-                ;;
             --skip-comfyui)
                 SKIP_COMFYUI=true
                 shift
@@ -85,13 +79,6 @@ parse_arguments() {
                 ;;
         esac
     done
-
-    # Validate comfyui mode
-    if [[ ! "$COMFYUI_MODE" =~ ^(embedded|s3)$ ]]; then
-        print_error "Invalid ComfyUI mode: $COMFYUI_MODE"
-        print_error "Valid options: embedded, s3"
-        exit 1
-    fi
 }
 
 # Setup environment
@@ -105,7 +92,7 @@ setup_environment() {
 
     print_info "AWS Account ID: $AWS_ACCOUNT_ID"
     print_info "AWS Region: $AWS_REGION"
-    print_info "ComfyUI Mode: $COMFYUI_MODE"
+    print_info "ComfyUI Mode: S3 (models mounted from S3)"
     print_info "Skip ComfyUI: $SKIP_COMFYUI"
 }
 
@@ -118,13 +105,9 @@ update_deployment_manifests() {
     # Update open-gallery deployment
     envsubst < open-gallery-deployment.yaml > open-gallery-deployment-temp.yaml
 
-    # Update ComfyUI deployment based on mode
+    # Update ComfyUI deployment (S3 mode only)
     if [ "$SKIP_COMFYUI" = false ]; then
-        if [ "$COMFYUI_MODE" == "embedded" ]; then
-            envsubst < comfyui-deployment-embedded.yaml > comfyui-deployment-temp.yaml
-        else
-            envsubst < comfyui-deployment.yaml > comfyui-deployment-temp.yaml
-        fi
+        envsubst < comfyui-deployment.yaml > comfyui-deployment-temp.yaml
     fi
 
     print_info "Deployment manifests updated."
@@ -159,7 +142,7 @@ deploy_applications() {
 
     # Deploy ComfyUI first (if not skipped)
     if [ "$SKIP_COMFYUI" = false ]; then
-        print_info "Deploying ComfyUI ($COMFYUI_MODE mode)..."
+        print_info "Deploying ComfyUI (S3 mode with models mounted from S3)..."
         kubectl apply -f comfyui-deployment-temp.yaml
     fi
 
@@ -310,7 +293,7 @@ display_summary() {
         COMFY_STATUS=$(kubectl get pods -l app=comfyui -o jsonpath='{.items[0].status.phase}')
         print_info "ComfyUI Pod: $COMFY_POD"
         print_info "ComfyUI Status: $COMFY_STATUS"
-        print_info "ComfyUI Mode: $COMFYUI_MODE"
+        print_info "ComfyUI Mode: S3 (models mounted from S3)"
     fi
 
     if [ ! -z "$ALB_URL" ]; then
@@ -354,18 +337,20 @@ cleanup() {
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Deploy Open Gallery and ComfyUI to existing EKS cluster"
+    echo "Deploy Open Gallery and ComfyUI (S3 mode) to existing EKS cluster"
     echo ""
     echo "Options:"
-    echo "  --comfyui-mode <mode>  ComfyUI deployment mode (default: embedded)"
-    echo "                         Options: embedded, s3"
-    echo "  --skip-comfyui         Skip ComfyUI deployment"
+    echo "  --skip-comfyui         Skip ComfyUI deployment (deploy only Open Gallery)"
+    echo "  --yes, -y              Skip confirmation prompts (for automation)"
     echo "  --help                 Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                              # Deploy with embedded ComfyUI"
-    echo "  $0 --comfyui-mode s3            # Deploy with S3-mounted ComfyUI"
+    echo "  $0                              # Deploy Open Gallery + ComfyUI (S3 mode)"
     echo "  $0 --skip-comfyui               # Deploy only Open Gallery"
+    echo "  $0 --yes                        # Deploy with auto-confirm"
+    echo ""
+    echo "Note: ComfyUI uses S3 mode only. Models are mounted from S3 bucket."
+    echo "      Make sure S3 CSI driver is installed and PV/PVC are configured."
     echo ""
 }
 

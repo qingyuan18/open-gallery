@@ -14,9 +14,9 @@ spec:
     - prefix models/
   csi:
     driver: s3.csi.aws.com
-    volumeHandle: salunchbucket  # Your S3 bucket name
+    volumeHandle: comfyui-models-bucket-687912291502  # Your S3 bucket name
     volumeAttributes:
-      bucketName: salunchbucket
+      bucketName: comfyui-models-bucket-687912291502
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

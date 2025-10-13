@@ -35,6 +35,16 @@ spec:
         # S3 mount version - smaller image, requires S3 CSI driver
         image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/comfyui-s3:latest
         imagePullPolicy: Always
+
+        # Explicit startup command (same as standalone deployment)
+        command:
+        - bash
+        - -lc
+        - |
+          mkdir -p /tmp/comfyui-logs
+          echo "🚀 Starting ComfyUI at $(date)" | tee /tmp/comfyui-logs/comfyui_runtime.log
+          python -u main.py --listen 0.0.0.0 --port 8188 2>&1 | tee -a /tmp/comfyui-logs/comfyui_runtime.log
+
         ports:
         - containerPort: 8188
           name: http

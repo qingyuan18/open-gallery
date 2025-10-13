@@ -7,7 +7,7 @@
 #   ./build-and-push.sh [OPTIONS]
 #
 # Options:
-#   --app <name>          Application to build: open-gallery, comfyui-embedded, comfyui-s3, all (default: all)
+#   --app <name>          Application to build: open-gallery, comfyui-s3, all (default: all)
 #   --tag <tag>           Image tag (default: latest)
 #   --region <region>     AWS region (default: us-west-2)
 #   --help                Show this help message
@@ -81,9 +81,9 @@ parse_arguments() {
     done
 
     # Validate app name
-    if [[ ! "$APP_TO_BUILD" =~ ^(open-gallery|comfyui-embedded|comfyui-s3|all)$ ]]; then
+    if [[ ! "$APP_TO_BUILD" =~ ^(open-gallery|comfyui-s3|all)$ ]]; then
         print_error "Invalid app name: $APP_TO_BUILD"
-        print_error "Valid options: open-gallery, comfyui-embedded, comfyui-s3, all"
+        print_error "Valid options: open-gallery, comfyui-s3, all"
         exit 1
     fi
 }
@@ -149,8 +149,8 @@ build_image() {
 
     print_info "Building ${app_name} Docker image..."
 
-    if [ "$app_name" == "comfyui-embedded" ]; then
-        print_warn "This may take 30-60 minutes due to model downloads..."
+    if [ "$app_name" == "comfyui-s3" ]; then
+        print_info "Building ComfyUI S3 version (models will be mounted from S3 at runtime)..."
     fi
 
     # Navigate to appropriate directory
@@ -229,10 +229,6 @@ display_summary() {
         print_info "Open Gallery: ${ECR_REGISTRY}/open-gallery:${IMAGE_TAG}"
     fi
 
-    if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "comfyui-embedded" ]; then
-        print_info "ComfyUI (Embedded): ${ECR_REGISTRY}/comfyui-embedded:${IMAGE_TAG}"
-    fi
-
     if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "comfyui-s3" ]; then
         print_info "ComfyUI (S3): ${ECR_REGISTRY}/comfyui-s3:${IMAGE_TAG}"
     fi
@@ -253,7 +249,7 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --app <name>      Application to build (default: all)"
-    echo "                    Options: open-gallery, comfyui-embedded, comfyui-s3, all"
+    echo "                    Options: open-gallery, comfyui-s3, all"
     echo "  --tag <tag>       Image tag (default: latest)"
     echo "  --region <region> AWS region (default: us-west-2)"
     echo "  --help            Show this help message"
@@ -261,8 +257,10 @@ show_usage() {
     echo "Examples:"
     echo "  $0                                    # Build all images"
     echo "  $0 --app open-gallery                 # Build only open-gallery"
-    echo "  $0 --app comfyui-embedded --tag v1.0  # Build ComfyUI embedded with tag v1.0"
     echo "  $0 --app comfyui-s3                   # Build ComfyUI S3 version"
+    echo "  $0 --app comfyui-s3 --tag v1.0        # Build ComfyUI S3 with tag v1.0"
+    echo ""
+    echo "Note: ComfyUI uses S3 mode only. Models are mounted from S3 at runtime."
     echo ""
 }
 
@@ -284,13 +282,6 @@ main() {
         build_and_push_app "open-gallery" \
             "deploy/open-gallery.dockerfile" \
             "open-gallery" \
-            "."
-    fi
-
-    if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "comfyui-embedded" ]; then
-        build_and_push_app "comfyui-embedded" \
-            "deploy/comfyui-embedded.dockerfile" \
-            "comfyui-embedded" \
             "."
     fi
 

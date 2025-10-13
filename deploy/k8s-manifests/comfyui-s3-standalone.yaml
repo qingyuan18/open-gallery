@@ -51,7 +51,10 @@ spec:
         command:
         - bash
         - -lc
-        - python -u main.py --listen 0.0.0.0 --port 8188
+        - |
+          mkdir -p /tmp/comfyui-logs
+          echo "🚀 Starting ComfyUI at $(date)" | tee /tmp/comfyui-logs/comfyui_runtime.log
+          python -u main.py --listen 0.0.0.0 --port 8188 2>&1 | tee -a /tmp/comfyui-logs/comfyui_runtime.log
 
         ports:
         - containerPort: 8188

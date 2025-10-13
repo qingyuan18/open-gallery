@@ -247,13 +247,18 @@ define_models() {
     S3_PATHS+=("models/clip/clip_l.safetensors")
 
     # Diffusion Models
-    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan_2.1_unet_fp8_e4m3fn_scaled.safetensors")
-    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan_2.1_unet_fp8_e4m3fn_scaled.safetensors")
-    S3_PATHS+=("models/diffusion_models/wan_2.1_unet_fp8_e4m3fn_scaled.safetensors")
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors")
+    S3_PATHS+=("models/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors")
 
-    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_unet_fp8_e4m3fn_scaled.safetensors")
-    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan2.2_unet_fp8_e4m3fn_scaled.safetensors")
-    S3_PATHS+=("models/diffusion_models/wan2.2_unet_fp8_e4m3fn_scaled.safetensors")
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors")
+    S3_PATHS+=("models/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors")
+
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors")
+    S3_PATHS+=("models/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors")
+    
 
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/flux1-kontext-dev_ComfyUI/resolve/main/split_files/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors")
