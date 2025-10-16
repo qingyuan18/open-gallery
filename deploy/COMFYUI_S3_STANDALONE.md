@@ -197,7 +197,7 @@ kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-mountpoint-s3-csi-
 # 检查 PV 状态
 kubectl get pv comfyui-models-pv-test
 
-# 检查 Pod Identity 或 IRSA
+# 检查 Pod Identity
 kubectl get sa s3-csi-driver-sa -n kube-system -o yaml
 ```
 

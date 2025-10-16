@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: open-gallery-files-pv
+spec:
+  capacity:
+    storage: 500Gi  # Arbitrary value for S3
+  accessModes:
+    - ReadWriteMany
+  mountOptions:
+    - allow-delete
+    - region us-west-2
+  csi:
+    driver: s3.csi.aws.com
+    volumeHandle: open-gallery-files-bucket-687912291502  # S3 bucket name for Open Gallery files
+    volumeAttributes:
+      bucketName: open-gallery-files-bucket-687912291502
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-gallery-files-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  resources:
+    requests:
+      storage: 500Gi
+  volumeName: open-gallery-files-pv
+

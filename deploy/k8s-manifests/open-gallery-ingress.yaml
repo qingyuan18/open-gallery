@@ -32,7 +32,7 @@ metadata:
     # alb.ingress.kubernetes.io/subnets: subnet-xxxxxxxx,subnet-yyyyyyyy
     
     # Tags
-    alb.ingress.kubernetes.io/tags: Environment=production,Application=comfyui
+    alb.ingress.kubernetes.io/tags: Environment=production,Application=open-gallery
     
     # Optional: Enable HTTPS with ACM certificate
     # Step 1: Request or import a certificate in AWS Certificate Manager (ACM)

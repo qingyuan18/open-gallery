@@ -35,7 +35,7 @@ deploy/
     ├── build-and-push.sh                  # 构建和推送镜像
     ├── deploy-to-eks.sh                   # 部署到 EKS (完整部署 - S3 模式)
     ├── deploy-comfyui-s3-standalone.sh    # ComfyUI-S3 独立测试部署
-    ├── setup-s3-csi.sh                    # S3 CSI 设置 (支持 Pod Identity 和 IRSA)
+    ├── setup-s3-csi.sh                    # S3 CSI 设置（Pod Identity）
     └── upload-models-to-s3.sh             # 上传模型到 S3
 ```
 
@@ -203,7 +203,7 @@ aws eks create-pod-identity-association \
 ./scripts/setup-s3-csi.sh \
     --cluster-name your-cluster-name \
     --bucket comfyui-models-bucket-687912291502 \
-    --use-pod-identity  # 使用 Pod Identity 而非 IRSA
+    --use-pod-identity  # 使用 Pod Identity
 ```
 
 
@@ -403,7 +403,7 @@ aws eks describe-addon \
     --addon-name aws-mountpoint-s3-csi-driver \
     --region us-west-2
 
-# 检查 Service Account 和 IRSA
+# 检查 Service Account
 kubectl get sa s3-csi-driver-sa -n kube-system -o yaml
 
 # 测试 S3 访问
@@ -422,7 +422,6 @@ kubectl describe pvc comfyui-models-pvc
 # 常见原因:
 # - S3 bucket 不存在或无权限访问
 # - CSI driver 未正确安装
-# - IRSA 配置错误
 ```
 
 **问题 2: Pod Identity 关联错误**
@@ -436,8 +435,7 @@ aws eks describe-pod-identity-association \
     --cluster-name your-cluster-name \
     --association-id ASSOCIATION_ID
 
-# 如果使用 IRSA，检查 Service Account 注解
-kubectl get sa s3-csi-driver-sa -n kube-system -o yaml
+
 ```
 
 **问题 3: 挂载权限错误**
@@ -485,3 +483,138 @@ aws ecr delete-repository --repository-name comfyui-s3 --force
 
 
 
+
+
+---
+
+## ⚖️ 节点调度与机型选择（CPU/GPU）
+
+为确保资源利用最优，Open Gallery 仅调度到 CPU 节点，ComfyUI 调度到 GPU 节点：
+
+- ComfyUI Deployment 已内置 `nodeSelector: { workload: gpu }`
+- Open Gallery Deployment 已更新为 `nodeSelector: { workload: cpu }`
+
+在 AWS HyperPod 集群上通常已预置 CPU/GPU 相关标签，无需手动打标；以下步骤仅在你的集群缺少这些标签时使用。
+
+如果你的节点还未打标，请按需为节点添加标签：
+
+```bash
+# 按实例规格为 GPU 节点打标签（示例：ml.g6e.4xlarge）
+kubectl get nodes -l node.kubernetes.io/instance-type=ml.g6e.4xlarge -o name \
+  | xargs -I{} kubectl label {} workload=gpu --overwrite
+
+# 为 CPU 节点打标签（根据你的实例类型筛选）
+kubectl get nodes -l '!node.kubernetes.io/instance-type'  # 或按具体类型过滤
+# 示例：将所有非 GPU 节点标记为 cpu（请按需筛选后执行）
+# kubectl get nodes -o name | xargs -I{} kubectl label {} workload=cpu --overwrite
+```
+
+如使用 taints 隔离 GPU 节点，请在 ComfyUI 部署中启用相应 tolerations（模板中已有示例，按需取消注释）。
+
+---
+
+## 🗂️ Open Gallery 文件存储挂载（S3）
+
+Open Gallery 需要将生成的图像/视频持久化到 S3。我们使用 AWS Mountpoint for S3 CSI Driver 将 S3 bucket 挂载到容器内 `server/user_data/files` 目录。
+
+- 默认文件桶：`open-gallery-files-bucket-687912291502`
+- 对应 PV/PVC 文件：`k8s-manifests/open-gallery-files-pv-pvc.yaml`
+- Open Gallery Deployment 已挂载 PVC 到容器内路径：`/app/server/user_data/files`
+
+准备与应用：
+
+```bash
+# 1) 确保已安装 S3 CSI Driver（见下文或运行脚本）
+#    ./scripts/setup-s3-csi.sh --cluster-name <cluster> --bucket open-gallery-files-bucket-687912291502 --use-pod-identity
+
+# 2) 应用 Open Gallery 文件存储 PV/PVC（读写）
+kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml
+
+# 3) 部署/更新 Open Gallery（脚本会应用 deployment）
+./scripts/deploy-to-eks.sh --skip-comfyui   # 仅更新 Open Gallery 时可用
+```
+
+验证挂载：
+
+```bash
+# Pod 内查看挂载目录
+POD=$(kubectl get pods -l app=open-gallery -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -it $POD -- bash -lc 'mount | grep s3 && ls -la /app/server/user_data/files'
+```
+
+如需修改 bucket 或 region，请调整 `open-gallery-files-pv-pvc.yaml` 中的 `bucketName` 与 `mountOptions.region`。
+
+---
+
+## 🔧 安装 AWS Load Balancer Controller（ALB Ingress）
+
+Ingress 使用 AWS Load Balancer Controller 创建 ALB。若集群尚未安装，请按如下步骤通过 Pod Identity 安装。
+
+### 方式 A：EKS Pod Identity（推荐）
+
+```bash
+# 0) 前置：添加 Helm 仓库
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update
+
+# 1) 为 Controller 创建 IAM Policy（仅需一次）
+curl -o iam_policy.json \
+  https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+aws iam create-policy \
+  --policy-name AWSLoadBalancerControllerIAMPolicy \
+  --policy-document file://iam_policy.json || true
+
+# 2) 让 Helm 创建 ServiceAccount（kube-system/aws-load-balancer-controller）
+helm upgrade -i aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=<your-eks-cluster-name> \
+  --set region=<aws-region> \
+  --set vpcId=<your-vpc-id> \
+  --set serviceAccount.create=true
+
+# 3) 为该 ServiceAccount 关联 Pod Identity Role
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ROLE_NAME=AWSLoadBalancerControllerRole
+aws iam create-role \
+  --role-name $ROLE_NAME \
+  --assume-role-policy-document '{
+    "Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"pods.eks.amazonaws.com"},"Action":["sts:AssumeRole","sts:TagSession"]}]}' || true
+aws iam attach-role-policy \
+  --role-name $ROLE_NAME \
+  --policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/AWSLoadBalancerControllerIAMPolicy || true
+aws eks create-pod-identity-association \
+  --cluster-name <your-eks-cluster-name> \
+  --namespace kube-system \
+  --service-account aws-load-balancer-controller \
+  --role-arn arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME} || true
+
+# 4) 验证
+kubectl -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=300s
+```
+
+
+
+安装成功后，`k8s-manifests/open-gallery-ingress.yaml` 会自动创建 ALB；脚本 `scripts/deploy-to-eks.sh` 已包含 Ingress 应用和等待逻辑。
+
+---
+
+## 📦 部署顺序小结（含本次新增）
+
+```bash
+# 1) 安装/验证 AWS Load Balancer Controller（使用 Pod Identity）
+# 2) 安装 S3 CSI Driver（可用脚本）
+./scripts/setup-s3-csi.sh --cluster-name <cluster> --bucket comfyui-models-bucket-687912291502 --use-pod-identity
+./scripts/setup-s3-csi.sh --cluster-name <cluster> --bucket open-gallery-files-bucket-687912291502 --use-pod-identity
+
+# 3) 应用 PV/PVC（模型 + 文件）
+kubectl apply -f k8s-manifests/s3-pv-pvc.yaml                     # ComfyUI 模型（只读）
+kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml     # Open Gallery 文件（读写）
+
+# 4) 构建与部署
+./scripts/build-and-push.sh --app comfyui-s3
+./scripts/build-and-push.sh --app open-gallery
+./scripts/deploy-to-eks.sh
+
+# 5) 获取 ALB 地址
+kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' && echo
+```
