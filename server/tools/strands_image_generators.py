@@ -964,7 +964,7 @@ def create_generate_image_with_context(session_id: str, canvas_id: str, image_mo
                                     {
                                         'type': 'image_url',
                                         'image_url': {
-                                            'url': f'/api/file/{file_id}'
+                                            'url': f'/api/file/{file_path}'
                                         }
                                     }
                                 ]

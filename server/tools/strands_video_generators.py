@@ -224,7 +224,7 @@ def create_generate_video_with_context(session_id: str, canvas_id: str, video_mo
                         # Save video message to database (similar to image generation)
                         if session_id:
                             # Create video message for database with download link
-                            video_url = f"/api/file/{file_id}"
+                            video_url = f"/api/file/{file_path}"
                             video_message_content = f"✅ Video generated successfully!\n\n📹 **Video Details:**\n- File ID: `{file_id}`\n- Dimensions: {width}x{height}\n- Duration: {duration_seconds} seconds\n- Model: {model}\n- Mode: {'Image-to-Video' if processed_input_image else 'Text-to-Video'}\n\n📥 **Download Video:**\n[Download {file_id}]({video_url})\n\nThe video has been saved and is ready for download."
 
                             video_message = {
@@ -263,7 +263,7 @@ def create_generate_video_with_context(session_id: str, canvas_id: str, video_mo
                 print(f"🔍 DEBUG: Successfully broadcasted file_generated message for session {session_id}")
 
             # Return message with download link for video file
-            video_url = f"/api/file/{file_id}"
+            video_url = f"/api/file/{file_path}"
             return f"✅ Video generated successfully!\n\n📹 **Video Details:**\n- File ID: `{file_id}`\n- Dimensions: {width}x{height}\n- Duration: {duration_seconds} seconds\n- Model: {model}\n- Mode: {'Image-to-Video' if processed_input_image else 'Text-to-Video'}\n\n📥 **Download Video:**\n[Download {file_id}]({video_url})\n\nThe video has been saved and is ready for download."
             
         except Exception as e:
