@@ -59,9 +59,6 @@ export class SocketIOManager {
         timeout: 30000,               // 连接超时30秒
         forceNew: true,               // 强制创建新连接
         auth: authData,               // 添加身份验证数据
-        // 添加心跳机制防止连接超时
-        pingInterval: 25000,          // 25秒发送一次ping
-        pingTimeout: 60000,           // 60秒没有pong就认为断开
       })
 
       this.socket.on('connect', () => {
@@ -324,7 +321,7 @@ export class SocketIOManager {
       console.log(`📊 HTTP Polling update for session ${sessionId}, processing: ${data.is_processing}, messages: ${data.messages?.length || 0}`)
 
       // 发送消息更新事件
-      const eventData = {
+      const eventData: ISocket.SessionAllMessagesEvent = {
         session_id: sessionId,
         type: ISocket.SessionEventType.AllMessages,
         messages: data.messages
@@ -354,11 +351,6 @@ export class SocketIOManager {
   // 检查是否正在使用轮询
   isPolling(): boolean {
     return this.pollingEnabled
-  }
-
-  // 检查WebSocket是否已连接
-  isConnected(): boolean {
-    return this.connected
   }
 }
 

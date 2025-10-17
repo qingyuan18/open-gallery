@@ -22,7 +22,7 @@ export default function JaazSetting({
   const { setShowLoginDialog } = useConfigs()
 
   const handleModelsChange = (
-    models: Record<string, { type?: 'text' | 'image' | 'video' }>
+    models: Record<string, { type?: 'text' | 'image' | 'video' | 'comfyui'; media_type?: 'image' | 'video' }>
   ) => {
     onConfigChange('jaaz', {
       ...config,

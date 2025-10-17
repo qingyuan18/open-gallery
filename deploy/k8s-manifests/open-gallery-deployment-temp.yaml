@@ -29,7 +29,7 @@ spec:
         containers:
         - name: open-gallery
           # Replace with your ECR image URL
-          image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/open-gallery:latest
+          image: 687912291502.dkr.ecr.us-west-2.amazonaws.com/open-gallery:latest
           imagePullPolicy: Always
           ports:
           - containerPort: 57988

@@ -25,15 +25,21 @@ export type ToolResultMessage = {
   role: 'tool'
   tool_call_id: string
   content: string
+  id?: string
+  timestamp?: string
 }
 export type AssistantMessage = {
   role: 'assistant'
   tool_calls?: ToolCall[]
   content?: MessageContent[] | string
+  id?: string
+  timestamp?: string
 }
 export type UserMessage = {
   role: 'user'
   content: MessageContent[] | string
+  id?: string
+  timestamp?: string
 }
 export type Message = UserMessage | AssistantMessage | ToolResultMessage
 
@@ -61,7 +67,7 @@ export enum EAgentState {
 }
 
 export type LLMConfig = {
-  models: Record<string, { type?: 'text' | 'image' | 'video' }>
+  models: Record<string, { type?: 'text' | 'image' | 'video' | 'comfyui'; media_type?: 'image' | 'video' }>
   url: string
   api_key: string
   max_tokens?: number

@@ -173,6 +173,9 @@ wait_for_deployments() {
 deploy_ingress() {
     print_info "Deploying Ingress..."
 
+    # Ensure IngressClass exists
+    kubectl apply -f alb-ingress-class.yaml
+
     kubectl apply -f open-gallery-ingress.yaml
 
     print_info "Ingress deployed successfully."
@@ -328,7 +331,8 @@ display_summary() {
 # Cleanup temporary files
 cleanup() {
     print_info "Cleaning up temporary files..."
-    cd "$(dirname "$0")/../k8s-manifests"
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    cd "${SCRIPT_DIR}/../k8s-manifests" 2>/dev/null || return 0
     rm -f open-gallery-deployment-temp.yaml
     rm -f comfyui-deployment-temp.yaml
 }

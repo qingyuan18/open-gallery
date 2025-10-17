@@ -45,7 +45,7 @@ export default function CommonSetting({
   }
 
   const handleModelsChange = (
-    models: Record<string, { type?: 'text' | 'image' | 'video' }>
+    models: Record<string, { type?: 'text' | 'image' | 'video' | 'comfyui'; media_type?: 'image' | 'video' }>
   ) => {
     onConfigChange(providerKey, {
       ...config,

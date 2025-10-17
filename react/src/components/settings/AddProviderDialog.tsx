@@ -59,7 +59,7 @@ export default function AddProviderDialog({
   const [apiUrl, setApiUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [models, setModels] = useState<
-    Record<string, { type?: 'text' | 'image' | 'video' }>
+    Record<string, { type?: 'text' | 'image' | 'video' | 'comfyui'; media_type?: 'image' | 'video' }>
   >({})
 
   // Handle data change when provider is selected

@@ -14,13 +14,14 @@ import { Dialog, DialogContent, DialogTrigger } from '../ui/dialog'
 
 export type ModelItem = {
   name: string
-  type: 'text' | 'image' | 'video'
+  type: 'text' | 'image' | 'video' | 'comfyui'
+  media_type?: 'image' | 'video'
 }
 
 interface ModelsListProps {
-  models: Record<string, { type?: 'text' | 'image' | 'video' }>
+  models: Record<string, { type?: 'text' | 'image' | 'video' | 'comfyui'; media_type?: 'image' | 'video' }>
   onChange: (
-    models: Record<string, { type?: 'text' | 'image' | 'video' }>
+    models: Record<string, { type?: 'text' | 'image' | 'video' | 'comfyui'; media_type?: 'image' | 'video' }>
   ) => void
   label?: string
 }
@@ -40,7 +41,8 @@ export default function AddModelsList({
     if (!isInitialized) {
       const items = Object.entries(models).map(([name, config]) => ({
         name,
-        type: (config.type || 'text') as 'text' | 'image' | 'video',
+        type: (config.type || 'text') as 'text' | 'image' | 'video' | 'comfyui',
+        media_type: config.media_type,
       }))
       setModelItems(items.length > 0 ? items : [])
       setIsInitialized(true)
@@ -53,11 +55,14 @@ export default function AddModelsList({
       const validModels = items.filter((model) => model.name.trim())
       const modelsConfig: Record<
         string,
-        { type?: 'text' | 'image' | 'video' }
+        { type?: 'text' | 'image' | 'video' | 'comfyui'; media_type?: 'image' | 'video' }
       > = {}
 
       validModels.forEach((model) => {
-        modelsConfig[model.name] = { type: model.type }
+        modelsConfig[model.name] = {
+          type: model.type,
+          ...(model.media_type && { media_type: model.media_type })
+        }
       })
 
       onChange(modelsConfig)
@@ -93,7 +98,9 @@ export default function AddModelsList({
   ) => {
     const newItems = [...modelItems]
     if (field === 'type') {
-      newItems[index][field] = value as 'text' | 'image' | 'video'
+      newItems[index][field] = value as 'text' | 'image' | 'video' | 'comfyui'
+    } else if (field === 'media_type') {
+      newItems[index][field] = value as 'image' | 'video'
     } else {
       newItems[index][field] = value
     }
@@ -152,6 +159,7 @@ export default function AddModelsList({
                   <SelectItem value="text">text</SelectItem>
                   <SelectItem value="image">image</SelectItem>
                   <SelectItem value="video">video</SelectItem>
+                  <SelectItem value="comfyui">comfyui</SelectItem>
                 </SelectContent>
               </Select>
               {modelItems.length > 1 && (
