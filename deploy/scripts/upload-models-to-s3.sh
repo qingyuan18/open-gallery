@@ -246,6 +246,12 @@ define_models() {
     LOCAL_PATHS+=("$TEMP_DIR/models/clip/clip_l.safetensors")
     S3_PATHS+=("models/clip/clip_l.safetensors")
 
+
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/clip/qwen_2.5_vl_7b_fp8_scaled.safetensors")
+    S3_PATHS+=("models/clip/qwen_2.5_vl_7b_fp8_scaled.safetensors")
+    
+
     # Diffusion Models
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors")

@@ -34,7 +34,7 @@
   },
   "22": {
     "inputs": {
-      "model": "Wan2_1-T2V-14B_fp8_e4m3fn.safetensors",
+      "model": "wan2.1_t2v_14B_fp8_e4m3fn.safetensors",
       "base_precision": "bf16",
       "quantization": "fp8_e4m3fn",
       "load_device": "offload_device",

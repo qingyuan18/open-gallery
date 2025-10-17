@@ -89,7 +89,7 @@ kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingr
 | `s3-csi-driver-sa` | S3 CSI Driver | 挂载 S3 bucket |
 | `open-gallery-sa` | Open Gallery App | DynamoDB + S3 + Bedrock |
 | `aws-load-balancer-controller` | ALB Controller | 创建/管理 ALB |
-```
+
 
 ## �🔍 故障排除
 
