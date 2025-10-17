@@ -88,6 +88,7 @@ class ComfyUIGenerator(ImageGenerator):
         print(f"🎨 ComfyUI generating: {model}")
 
         api_url = config_service.app_config.get('comfyui', {}).get('url', '')
+        print(f"🔍 DEBUG: Using server-config ComfyUI URL: {api_url}")
 
         if not api_url:
             raise Exception("ComfyUI URL not configured")

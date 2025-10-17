@@ -102,6 +102,11 @@ class ConfigService:
                 else:
                     # Add new provider not in defaults
                     merged_config[provider] = provider_config
+            # Environment variable overrides (useful for Kubernetes)
+            env_comfy = os.getenv('COMFYUI_ENDPOINT') or os.getenv('COMFYUI_URL')
+            if env_comfy:
+                merged_config.setdefault('comfyui', {})
+                merged_config['comfyui']['url'] = env_comfy
             self.app_config = merged_config
 
             # Handle database config
@@ -114,6 +119,11 @@ class ConfigService:
             print(f"Config file not found or invalid, using defaults: {e}")
             # Use default config if file doesn't exist or is invalid
             self.app_config = DEFAULT_PROVIDERS_CONFIG.copy()
+            # Apply environment variable overrides even when config file is missing
+            env_comfy = os.getenv('COMFYUI_ENDPOINT') or os.getenv('COMFYUI_URL')
+            if env_comfy:
+                self.app_config.setdefault('comfyui', {})
+                self.app_config['comfyui']['url'] = env_comfy
             self.db_config = DEFAULT_DATABASE_CONFIG.copy()
 
     def get_config(self):

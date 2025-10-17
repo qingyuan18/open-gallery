@@ -17,6 +17,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Absolute path to this script directory (independent of current working dir)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Function to print colored output
 print_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -100,7 +103,7 @@ setup_environment() {
 update_deployment_manifests() {
     print_info "Updating deployment manifests with image URLs..."
 
-    cd "$(dirname "$0")/../k8s-manifests"
+    cd "${SCRIPT_DIR}/../k8s-manifests"
 
     # Update open-gallery deployment
     envsubst < open-gallery-deployment.yaml > open-gallery-deployment-temp.yaml
@@ -389,7 +392,6 @@ display_summary() {
 # Cleanup temporary files
 cleanup() {
     print_info "Cleaning up temporary files..."
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     cd "${SCRIPT_DIR}/../k8s-manifests" 2>/dev/null || return 0
     rm -f open-gallery-deployment-temp.yaml
     rm -f comfyui-deployment-temp.yaml

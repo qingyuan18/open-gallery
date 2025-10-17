@@ -52,7 +52,12 @@ export const ConfigsProvider = ({
           modelList.find((m) => m.provider + ':' + m.model == imageModel)
         )
       } else {
-        setImageModel(modelList.find((m) => m.type == 'image'))
+        // Prefer ComfyUI as the default image provider if available
+        const preferred =
+          modelList.find(
+            (m) => m.provider === 'comfyui' && (m.media_type === 'image' || m.type === 'comfyui')
+          ) || modelList.find((m) => m.type == 'image')
+        setImageModel(preferred)
       }
 
       const videoModel = localStorage.getItem('video_model')
