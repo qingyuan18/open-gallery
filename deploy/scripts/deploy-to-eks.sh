@@ -33,23 +33,23 @@ print_error() {
 # Check prerequisites
 check_prerequisites() {
     print_info "Checking prerequisites..."
-    
+
     if ! command -v kubectl &> /dev/null; then
         print_error "kubectl is not installed."
         exit 1
     fi
-    
+
     if ! command -v aws &> /dev/null; then
         print_error "AWS CLI is not installed."
         exit 1
     fi
-    
+
     # Check if kubectl can connect to cluster
     if ! kubectl cluster-info &> /dev/null; then
         print_error "Cannot connect to Kubernetes cluster. Please configure kubectl."
         exit 1
     fi
-    
+
     print_info "All prerequisites are met."
 }
 
@@ -199,6 +199,64 @@ wait_for_alb() {
 
     print_warn "ALB provisioning is taking longer than expected. Check AWS console for details."
 }
+
+# Tag ALB security groups so the controller can manage inbound rules
+# Some users provide a pre-existing SG via annotations; ALB Controller only manages SGs tagged with the cluster key
+# We infer the cluster tag from the ALB itself and apply it to attached SGs
+tag_alb_security_groups() {
+    print_info "Tagging ALB security groups for cluster ownership (if needed)..."
+
+    if [ -z "$ALB_URL" ]; then
+        print_warn "ALB URL not available, skipping SG tagging."
+        return 0
+    fi
+
+    # Resolve ALB ARN from DNSName
+    LB_ARN=$(aws elbv2 describe-load-balancers \
+        --region "$AWS_REGION" \
+        --query "LoadBalancers[?DNSName=='${ALB_URL}'].LoadBalancerArn" \
+        --output text 2>/dev/null)
+
+    if [ -z "$LB_ARN" ] || [ "$LB_ARN" = "None" ]; then
+        print_warn "Could not resolve ALB ARN from DNSName '$ALB_URL'. Skipping SG tagging."
+        return 0
+    fi
+
+    # Get the cluster tag key from the ALB itself (kubernetes.io/cluster/<name>)
+    CLUSTER_TAG_KEY=$(aws elbv2 describe-tags \
+        --region "$AWS_REGION" \
+        --resource-arns "$LB_ARN" \
+        --query "TagDescriptions[0].Tags[?starts_with(Key, 'kubernetes.io/cluster/')].Key" \
+        --output text 2>/dev/null)
+
+    if [ -z "$CLUSTER_TAG_KEY" ] || [ "$CLUSTER_TAG_KEY" = "None" ]; then
+        print_warn "ALB does not have a kubernetes.io/cluster/* tag. Skipping SG tagging."
+        return 0
+    fi
+
+    # Fetch Security Group IDs attached to the ALB
+    SG_IDS=$(aws elbv2 describe-load-balancers \
+        --region "$AWS_REGION" \
+        --load-balancer-arns "$LB_ARN" \
+        --query "LoadBalancers[0].SecurityGroups" \
+        --output text 2>/dev/null)
+
+    if [ -z "$SG_IDS" ] || [ "$SG_IDS" = "None" ]; then
+        print_warn "No security groups associated with ALB. Skipping SG tagging."
+        return 0
+    fi
+
+    for SG in $SG_IDS; do
+        print_info "Ensuring tag '$CLUSTER_TAG_KEY=owned' on security group $SG"
+        aws ec2 create-tags \
+            --region "$AWS_REGION" \
+            --resources "$SG" \
+            --tags Key="$CLUSTER_TAG_KEY",Value="owned" >/dev/null 2>&1 || true
+    done
+
+    print_success "Security group tagging step completed."
+}
+
 
 # Optional: Deploy HPA
 deploy_hpa() {
@@ -372,6 +430,7 @@ main() {
     wait_for_deployments
     deploy_ingress
     wait_for_alb
+    tag_alb_security_groups
     deploy_hpa
     verify_deployment
     display_summary
