@@ -140,7 +140,7 @@ async def generate_image(
         canvas_data['data']['elements'].append(new_image_element)
         canvas_data['data']['files'][file_id] = file_data
 
-        image_url = f"http://localhost:{DEFAULT_PORT}/api/file/{filename}"
+        image_url = f"/api/file/{filename}"
 
 
 

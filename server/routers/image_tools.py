@@ -57,7 +57,7 @@ async def upload_image(file: UploadFile = File(...)):
         print('🦄upload_image file_path', file_path)
         return {
             'file_id': full_file_id,
-            'url': f'http://localhost:{DEFAULT_PORT}/api/file/{full_file_id}',
+            'url': f'/api/file/{full_file_id}',
             'width': width,
             'height': height,
         }

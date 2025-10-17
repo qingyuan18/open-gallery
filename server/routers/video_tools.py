@@ -104,7 +104,7 @@ async def generate_video_tool(
             },
         })
 
-        return f"video generated successfully ![video_id: {filename}](http://localhost:{DEFAULT_PORT}/api/file/{filename})"
+        return f"video generated successfully ![video_id: {filename}](/api/file/{filename})"
     except Exception as e:
         print(f"Error generating video: {str(e)}")
         traceback.print_exc()
