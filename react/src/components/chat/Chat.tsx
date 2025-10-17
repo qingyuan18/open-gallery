@@ -242,7 +242,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       console.log('⭐️file_generated', data)
 
       // 检查文件类型，为图片和视频创建不同的消息
-      const fileUrl = `/api/file/${data.file_id}`
+      const fileUrl = `/api/file/${data.file_path || data.file_id}`
       const isVideo = data.file_type === 'video' || data.duration !== undefined
 
       let fileMessage: Message
