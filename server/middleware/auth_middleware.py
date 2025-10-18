@@ -114,13 +114,8 @@ class WebSocketAuthenticationMiddleware:
                 if user_info and user_info.get('id'):
                     return user_info
             
-            # Development mode fallback
-            return {
-                'id': 'dev_user',
-                'username': 'Development User',
-                'email': 'dev_user@example.com',
-                'provider': 'development'
-            }
+            # Require valid token; no development fallback
+            return None
             
         except Exception as e:
             print(f"❌ WebSocket authentication error: {e}")

@@ -22,7 +22,7 @@ async def check_comfy_server_running(port, host):
         response = await client.get(url)
         return response.status_code == 200
 
-async def execute(workflow: dict, host, port, wait=True, verbose=False, local_paths=False, timeout=300, ctx: dict = {}):
+async def execute(workflow: dict, host, port, wait=True, verbose=False, local_paths=False, timeout=3600, ctx: dict = {}):
     if not await check_comfy_server_running(port, host):
         pprint(f"[bold red]ComfyUI not running on specified address ({host}:{port})[/bold red]")
         raise typer.Exit(code=1)

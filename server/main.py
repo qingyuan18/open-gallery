@@ -32,7 +32,7 @@ app = FastAPI(lifespan=lifespan)
 
 # Add authentication middleware
 # Enable development mode for now - in production, set to False
-development_mode = os.environ.get('DEVELOPMENT_MODE', 'true').lower() == 'true'
+development_mode = os.environ.get('DEVELOPMENT_MODE', 'false').lower() == 'true'
 app.add_middleware(AuthenticationMiddleware, development_mode=development_mode)
 
 # Include routers

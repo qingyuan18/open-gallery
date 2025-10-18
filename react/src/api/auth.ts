@@ -109,28 +109,7 @@ export async function getAuthStatus(): Promise<AuthStatus> {
     return authStatus
   }
 
-  // Development mode: provide default user if no authentication
-  const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  if (isDevelopment) {
-    const devUser = {
-      id: 'dev_user',
-      username: 'Development User',
-      email: 'dev_user@example.com',
-      provider: 'development'
-    }
 
-    // Save development user to localStorage for consistency
-    localStorage.setItem('jaaz_access_token', 'dev_token')
-    localStorage.setItem('jaaz_user_info', JSON.stringify(devUser))
-
-    const devAuthStatus = {
-      status: 'logged_in' as const,
-      is_logged_in: true,
-      user_info: devUser,
-    }
-    console.log('Returning development mode auth status:', devAuthStatus)
-    return devAuthStatus
-  }
 
   const loggedOutStatus = {
     status: 'logged_out' as const,
