@@ -6,7 +6,7 @@ metadata:
   labels:
     app: comfyui
     version: v1
-    deployment-type: s3
+    deployment-type: efs
 spec:
   replicas: 1
   strategy:
@@ -32,7 +32,7 @@ spec:
       #   effect: NoSchedule
       containers:
       - name: comfyui
-        # S3 mount version - smaller image, requires S3 CSI driver
+        # Models mounted via PVC (EFS by default in this branch)
         image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/comfyui-s3:latest
         imagePullPolicy: Always
 
@@ -77,8 +77,8 @@ spec:
           failureThreshold: 3
         # Volume mounts
         volumeMounts:
-        # Mount S3 models - all models come from S3
-        - name: s3-models
+        # Mount models from EFS PVC (read-only for models)
+        - name: efs-models
           mountPath: /opt/program/models
           readOnly: true
         
@@ -106,8 +106,8 @@ spec:
       
       # Volumes
       volumes:
-      # S3 volume for models
-      - name: s3-models
+      # EFS volume for models
+      - name: efs-models
         persistentVolumeClaim:
-          claimName: comfyui-models-pvc
+          claimName: comfyui-models-pvc-efs
 

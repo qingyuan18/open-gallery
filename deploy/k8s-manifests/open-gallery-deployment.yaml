@@ -63,7 +63,7 @@ spec:
           volumeMounts:
           - name: config
             mountPath: /app/server/user_data  # Fixed: correct path for config.toml
-          - name: s3-files
+          - name: efs-files
             mountPath: /app/server/user_data/files
           # Environment variables
           env:
@@ -83,9 +83,9 @@ spec:
           configMap:
             name: open-gallery-config
             optional: true
-        - name: s3-files
+        - name: efs-files
           persistentVolumeClaim:
-            claimName: open-gallery-files-pvc
+            claimName: open-gallery-files-pvc-efs
 
         # Optional: Use PVC for persistent storage
         # - name: config

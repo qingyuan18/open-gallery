@@ -32,9 +32,9 @@ kubectl get deployment -n kube-system aws-load-balancer-controller
 
 
 
-## � 部署顺序小结
+## 🚀 部署顺序小结（本分支默认使用 EFS）
 
-完整的部署流程如下：
+完整的部署流程如下（EFS 为默认路径，同时保留 S3 模式的 PV/PVC 以便切换）：
 
 ```bash
 cd deploy
@@ -42,23 +42,34 @@ cd deploy
 # 0) 安装/验证 AWS Load Balancer Controller（使用 Pod Identity）
 # 参考下文 "附录：安装 AWS Load Balancer Controller" 章节
 
-# 1) 安装 S3 CSI Driver（用于挂载 S3 bucket）
-./scripts/setup-s3-csi.sh \
-    --cluster-name <cluster-name> \
-    --bucket comfyui-models-bucket-687912291502 \
-    --use-pod-identity
+# 1) 确认 EFS CSI Driver 已安装（你已完成，可跳过）
+#    并确保 EFS FileSystem 与 Mount Targets/Security Group 已就绪
 
-./scripts/setup-s3-csi.sh \
-    --cluster-name <cluster-name> \
-    --bucket open-gallery-files-bucket-687912291502 \
-    --use-pod-identity
+# 2) 应用 EFS PV/PVC（静态供给，与 S3 方式一致；本分支默认使用 EFS）
+export EFS_FILE_SYSTEM_ID=fs-xxxxxxxx         # 替换为你的 EFS FileSystemId
+# 如使用 Access Point，请把下面两个文件中的 volumeHandle 改为 fs-xxxxxxxx::fsap-xxxxxxxx
 
-# 2) 配置 Open Gallery Pod Identity（用于 DynamoDB/S3/Bedrock 访问）⭐ 新增
+# 应用 PV+PVC（模型）
+envsubst < k8s-manifests/efs-pvc-comfyui-models.yaml | kubectl apply -f -
+# 应用 PV+PVC（文件）
+envsubst < k8s-manifests/efs-pvc-open-gallery-files.yaml | kubectl apply -f -
+
+# 3) （可选但推荐）将 S3 内容同步到 EFS
+#   - 模型：从 models bucket 的 models/ 前缀预热到 EFS（提升首次加载速度）
+#   - 文件：如需迁移历史文件，同步到 EFS；否则可跳过
+chmod +x scripts/s3-to-efs-sync.sh
+./scripts/s3-to-efs-sync.sh \
+  --region us-west-2 \
+  --models-bucket comfyui-models-bucket-687912291502 \
+  --models-prefix models/ \
+  --files-bucket open-gallery-files-bucket-687912291502
+
+# 4) 配置 Open Gallery Pod Identity（用于 DynamoDB/S3/Bedrock 访问）
 ./scripts/setup-open-gallery-pod-identity.sh \
     --cluster-name <cluster-name> \
     --region us-west-2
 
-# 3) 为节点打标签（重要！）
+# 5) 为节点打标签（重要！）
 # GPU 节点
 kubectl get nodes -o json | jq -r '.items[] | select(.metadata.labels."node.kubernetes.io/instance-type" | test("ml\\.g6e|ml\\.g5|g5\\.|g6e\\.")) | .metadata.name' | xargs -I {} kubectl label nodes {} workload=gpu --overwrite
 
@@ -68,18 +79,16 @@ kubectl get nodes -o json | jq -r '.items[] | select(.metadata.labels."node.kube
 # 验证标签
 kubectl get nodes -L workload
 
-# 4) 应用 PV/PVC（模型 + 文件）
-kubectl apply -f k8s-manifests/s3-pv-pvc.yaml                     # ComfyUI 模型（只读）
-kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml     # Open Gallery 文件（读写）
-
-# 5) 构建与部署
+# 6) 构建与部署（本分支 Deployment 已默认使用 EFS 对应 PVC）
 ./scripts/build-and-push.sh --app comfyui-s3
 ./scripts/build-and-push.sh --app open-gallery
 ./scripts/deploy-to-eks.sh
 
-# 6) 获取 ALB 地址
+# 7) 获取 ALB 地址
 kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' && echo
 ```
+
+> 兼容模式（S3）：如需沿用 S3 PV/PVC，只需在 Deployment 中将 `claimName` 切回原来的 `comfyui-models-pvc` / `open-gallery-files-pvc` 即可；本分支保留了原有的 S3 PV/PVC 清单以便随时切换。
 
 
 **权限分离**

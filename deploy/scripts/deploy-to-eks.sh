@@ -95,7 +95,7 @@ setup_environment() {
 
     print_info "AWS Account ID: $AWS_ACCOUNT_ID"
     print_info "AWS Region: $AWS_REGION"
-    print_info "ComfyUI Mode: S3 (models mounted from S3)"
+    print_info "ComfyUI Mode: EFS (models mounted from EFS PVC)"
     print_info "Skip ComfyUI: $SKIP_COMFYUI"
 }
 
@@ -145,7 +145,7 @@ deploy_applications() {
 
     # Deploy ComfyUI first (if not skipped)
     if [ "$SKIP_COMFYUI" = false ]; then
-        print_info "Deploying ComfyUI (S3 mode with models mounted from S3)..."
+        print_info "Deploying ComfyUI (EFS mode with models mounted from PVC)..."
         kubectl apply -f comfyui-deployment-temp.yaml
     fi
 
@@ -357,7 +357,7 @@ display_summary() {
         COMFY_STATUS=$(kubectl get pods -l app=comfyui -o jsonpath='{.items[0].status.phase}')
         print_info "ComfyUI Pod: $COMFY_POD"
         print_info "ComfyUI Status: $COMFY_STATUS"
-        print_info "ComfyUI Mode: S3 (models mounted from S3)"
+        print_info "ComfyUI Mode: EFS (models mounted from EFS PVC)"
     fi
 
     if [ ! -z "$ALB_URL" ]; then
@@ -401,7 +401,7 @@ cleanup() {
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Deploy Open Gallery and ComfyUI (S3 mode) to existing EKS cluster"
+    echo "Deploy Open Gallery and ComfyUI (EFS default; models/files via EFS PVC) to existing EKS cluster"
     echo ""
     echo "Options:"
     echo "  --skip-comfyui         Skip ComfyUI deployment (deploy only Open Gallery)"
@@ -409,11 +409,11 @@ show_usage() {
     echo "  --help                 Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                              # Deploy Open Gallery + ComfyUI (S3 mode)"
+    echo "  $0                              # Deploy Open Gallery + ComfyUI (EFS default)"
     echo "  $0 --skip-comfyui               # Deploy only Open Gallery"
     echo "  $0 --yes                        # Deploy with auto-confirm"
     echo ""
-    echo "Note: ComfyUI uses S3 mode only. Models are mounted from S3 bucket."
+    echo "Note: This branch defaults to EFS. S3 PV/PVC manifests are retained for compatibility/switch-over."
     echo "      Make sure S3 CSI driver is installed and PV/PVC are configured."
     echo ""
 }

@@ -1,0 +1,17 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+parameters:
+  # Use EFS Access Point dynamic provisioning (recommended)
+  provisioningMode: efs-ap
+  # Replace with your EFS FileSystemId or export EFS_FILE_SYSTEM_ID and use envsubst when applying
+  fileSystemId: ${EFS_FILE_SYSTEM_ID}
+  # Optional: If you have a dedicated Access Point, uncomment and set it
+  # accessPointId: ${EFS_ACCESS_POINT_ID}
+mountOptions:
+  - tls
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+

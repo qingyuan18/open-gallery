@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: comfyui-models-pv-efs
+spec:
+  capacity:
+    storage: 100Gi  # Arbitrary for EFS; billing is usage-based
+  accessModes:
+    - ReadWriteMany
+  mountOptions:
+    - tls
+  persistentVolumeReclaimPolicy: Retain
+  csi:
+    driver: efs.csi.aws.com
+    # If you use an Access Point, set volumeHandle to fs-xxxxxxxx::fsap-xxxxxxxx
+    # Otherwise, set to just fs-xxxxxxxx
+    volumeHandle: ${EFS_FILE_SYSTEM_ID}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: comfyui-models-pvc-efs
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""  # Static provisioning (no StorageClass)
+  resources:
+    requests:
+      storage: 100Gi
+  volumeName: comfyui-models-pv-efs
+
