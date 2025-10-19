@@ -229,19 +229,15 @@ define_models() {
     declare -g -a S3_PATHS
     
     # Text Encoders
-    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
-    LOCAL_PATHS+=("$TEMP_DIR/models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
-    S3_PATHS+=("models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp16.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/text_encoders/umt5_xxl_fp16.safetensors")
+    S3_PATHS+=("models/text_encoders/umt5-xxl-enc-bf16.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/text_encoders/t5xxl_fp8_e4m3fn.safetensors")
     S3_PATHS+=("models/text_encoders/t5xxl_fp8_e4m3fn.safetensors")
 
     # CLIP Models
-    MODEL_URLS+=("https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/open-clip-xlm-roberta-large-vit-huge-14_fp16.safetensors")
-    LOCAL_PATHS+=("$TEMP_DIR/models/clip/open-clip-xlm-roberta-large-vit-huge-14_fp16.safetensors")
-    S3_PATHS+=("models/clip/open-clip-xlm-roberta-large-vit-huge-14_fp16.safetensors")
-
     MODEL_URLS+=("https://huggingface.co/openai/clip-vit-large-patch14/resolve/main/model.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/clip/clip_l.safetensors")
     S3_PATHS+=("models/clip/clip_l.safetensors")
@@ -307,10 +303,6 @@ define_models() {
     MODEL_URLS+=("https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Lightning-8steps-V1.1.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/Qwen-Image-Lightning-8steps-V1.1.safetensors")
     S3_PATHS+=("models/loras/Qwen-Image-Lightning-8steps-V1.1.safetensors")
-
-    MODEL_URLS+=("https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-FusionX/resolve/main/Wan2.1_T2V_14B_FusionX_LoRA.safetensors")
-    LOCAL_PATHS+=("$TEMP_DIR/models/loras/Wan2.1_T2V_14B_FusionX_LoRA.safetensors")
-    S3_PATHS+=("models/loras/Wan2.1_T2V_14B_FusionX_LoRA.safetensors")
 
     MODEL_URLS+=("https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/Wan2.2_I2V_14B_lightx2v_lora_high.safetensors")
