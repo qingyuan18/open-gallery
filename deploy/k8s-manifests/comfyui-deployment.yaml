@@ -70,12 +70,12 @@ spec:
             nvidia.com/gpu: 1
             memory: "56Gi"
             cpu: "12"
-            ephemeral-storage: "260Gi"
+            ephemeral-storage: "60Gi"
           requests:
             nvidia.com/gpu: 1
             memory: "32Gi"
             cpu: "8"
-            ephemeral-storage: "100Gi"
+            ephemeral-storage: "30Gi"
         # Health checks
         livenessProbe:
           httpGet:
