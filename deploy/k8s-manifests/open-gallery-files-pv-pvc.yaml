@@ -18,7 +18,7 @@ spec:
     volumeAttributes:
       bucketName: open-gallery-files-bucket-687912291502
       cache: emptyDir
-      cacheEmptyDirSizeLimit: 10Gi
+      cacheEmptyDirSizeLimit: 80Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
