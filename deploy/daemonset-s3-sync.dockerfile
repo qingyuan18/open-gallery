@@ -18,7 +18,7 @@ RUN set -euo pipefail && \
     tar -xzf /tmp/s5cmd.tgz -C /tmp && \
     install -m 0755 /tmp/s5cmd /usr/local/bin/s5cmd && \
     rm -rf /tmp/s5cmd* && \
-    s5cmd --version
+    s5cmd version
 
 # Python deps (optional but requested)
 RUN pip install --no-cache-dir --upgrade pip && \
