@@ -45,7 +45,7 @@ spec:
           S3_SRC="s3://comfyui-models-bucket-687912291502/models/"
           DST="/opt/dlami/nvme/comfyui-models/"
           echo "[s5cmd] syncing: ${S3_SRC} -> ${DST}"
-          s5cmd --concurrency="${S5CMD_CONCURRENCY:-64}" sync "${S3_SRC}" "${DST}"
+          s5cmd sync "${S3_SRC}" "${DST}"
           echo "[s5cmd] sync completed"
           sleep infinity
         env:

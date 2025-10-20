@@ -106,8 +106,8 @@ kubectl get nodes -L workload
     # 重新部署（若存在旧版本先删除）
     export AWS_REGION=${AWS_REGION:-us-west-2}
     export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    envsubst < k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml | kubectl delete -f - --ignore-not-found
-    envsubst < k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml | kubectl apply  -f -
+    envsubst '${AWS_ACCOUNT_ID} ${AWS_REGION}' < k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml | kubectl delete -f - --ignore-not-found
+    envsubst '${AWS_ACCOUNT_ID} ${AWS_REGION}' < k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml | kubectl apply  -f -
 
     # 检查 DaemonSet 与日志（每个 workload=gpu 节点应有 1 个 Pod）
     kubectl -n default get ds,pods -l app=comfyui-nvme-prewarm
