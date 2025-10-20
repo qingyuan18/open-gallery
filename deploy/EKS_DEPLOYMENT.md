@@ -68,6 +68,39 @@ kubectl get nodes -o json | jq -r '.items[] | select(.metadata.labels."node.kube
 # 验证标签
 kubectl get nodes -L workload
 
+
+    # 3.5) 关联 NVMe 预热 DaemonSet 的 Pod Identity 并部署（s5cmd）
+    export CLUSTER_NAME=hp-eks-03
+
+    # 查找现有 S3 CSI 的 Role ARN（优先 EKS Pod Identity，其次 IRSA 注解）
+    export S3_CSI_NS=kube-system
+    export S3_CSI_SA=s3-csi-driver-sa
+    export S3_CSI_ROLE_ARN=$(aws eks list-pod-identity-associations \
+        --cluster-name $CLUSTER_NAME \
+        --namespace $S3_CSI_NS \
+        --service-account $S3_CSI_SA \
+        --query 'associations[0].roleArn' \
+        --output text 2>/dev/null || true)
+    if [ -z "$S3_CSI_ROLE_ARN" ] || [ "$S3_CSI_ROLE_ARN" = "None" ]; then
+      S3_CSI_ROLE_ARN=$(kubectl -n $S3_CSI_NS get sa $S3_CSI_SA -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}' 2>/dev/null || true)
+    fi
+    echo "S3_CSI_ROLE_ARN=$S3_CSI_ROLE_ARN"
+
+    # 关联 default/comfyui-prewarm-sa 到该 Role（可复用同一 Role）
+    aws eks create-pod-identity-association \
+        --cluster-name $CLUSTER_NAME \
+        --namespace default \
+        --service-account comfyui-prewarm-sa \
+        --role-arn $S3_CSI_ROLE_ARN
+
+    # 重新部署（若存在旧版本先删除）
+    kubectl delete -f k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml --ignore-not-found
+    kubectl apply -f k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml
+
+    # 检查 DaemonSet 与日志（每个 workload=gpu 节点应有 1 个 Pod）
+    kubectl -n default get ds,pods -l app=comfyui-nvme-prewarm
+    kubectl logs -l app=comfyui-nvme-prewarm -f --all-containers
+
 # 4) 应用 PV/PVC（模型 + 文件）
 kubectl apply -f k8s-manifests/s3-pv-pvc.yaml                     # ComfyUI 模型（只读）
 kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml     # Open Gallery 文件（读写）
@@ -332,7 +365,7 @@ kubectl describe pvc comfyui-models-pvc
 ```bash
 # 检查 Pod Identity 关联
 aws eks list-pod-identity-associations \
-    --cluster-name your-cluster-name
+    --cluster-name hp-eks-03
 
 # 查看特定关联详情
 aws eks describe-pod-identity-association \

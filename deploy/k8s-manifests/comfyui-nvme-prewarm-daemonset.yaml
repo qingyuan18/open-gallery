@@ -1,0 +1,67 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: comfyui-prewarm-sa
+  namespace: default
+  labels:
+    app: comfyui-nvme-prewarm
+  # 如果使用 EKS Pod Identity，请将此 ServiceAccount 关联到具备只读 S3 权限的 IAM Role（与 s3 csi 类似的最小权限）：
+  # - s3:ListBucket (针对 comfyui-models-bucket-687912291502)
+  # - s3:GetObject   (针对 comfyui-models-bucket-687912291502/models/*)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: comfyui-nvme-prewarm
+  namespace: default
+  labels:
+    app: comfyui-nvme-prewarm
+spec:
+  selector:
+    matchLabels:
+      app: comfyui-nvme-prewarm
+  template:
+    metadata:
+      labels:
+        app: comfyui-nvme-prewarm
+    spec:
+      serviceAccountName: comfyui-prewarm-sa
+      nodeSelector:
+        workload: gpu
+      containers:
+      - name: prewarm
+        image: ghcr.io/peak/s5cmd:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-lc"]
+        # 说明：
+        # 1) 创建本地目录
+        # 2) 将 S3 模型同步至 NVMe（可调并发）
+        # 3) 保持容器存活，便于排障；如需周期增量同步，可改为循环 sleep+sync
+        args:
+        - |
+          set -e
+          mkdir -p /opt/dlami/nvme/comfyui-models
+          S3_SRC="s3://comfyui-models-bucket-687912291502/models/"
+          DST="/opt/dlami/nvme/comfyui-models/"
+          echo "[s5cmd] syncing: ${S3_SRC} -> ${DST}"
+          s5cmd --concurrency="${S5CMD_CONCURRENCY:-64}" sync "${S3_SRC}" "${DST}"
+          echo "[s5cmd] sync completed"
+          sleep infinity
+        env:
+        - name: AWS_REGION
+          value: "us-west-2"
+        volumeMounts:
+        - name: nvme-host
+          mountPath: /opt/dlami/nvme/comfyui-models
+      volumes:
+      - name: nvme-host
+        hostPath:
+          path: /opt/dlami/nvme/comfyui-models
+          type: DirectoryOrCreate
+      # 如 GPU 节点带有污点，可按需启用以下容忍（示例）：
+      # tolerations:
+      # - key: nvidia.com/gpu
+      #   operator: Exists
+      #   effect: NoSchedule
+

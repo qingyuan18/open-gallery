@@ -30,21 +30,6 @@ spec:
       # - key: nvidia.com/gpu
       #   operator: Exists
       #   effect: NoSchedule
-      initContainers:
-      - name: warm-s3-cache
-        image: nicolaka/netshoot
-        command: ["bash", "-lc"]
-        args:
-        - |
-          set -euo pipefail
-          shopt -s globstar nullglob
-          for f in /opt/program/models/**/*.safetensors; do
-            dd if="$f" of=/dev/null bs=64M status=none || true
-          done
-        volumeMounts:
-        - name: s3-models
-          mountPath: /opt/program/models
-          readOnly: true
 
       containers:
       - name: comfyui
@@ -95,8 +80,8 @@ spec:
           failureThreshold: 3
         # Volume mounts
         volumeMounts:
-        # Mount S3 models - all models come from S3
-        - name: s3-models
+        # Mount NVMe models via hostPath
+        - name: nvme-host
           mountPath: /opt/program/models
           readOnly: true
 
@@ -124,8 +109,9 @@ spec:
 
       # Volumes
       volumes:
-      # S3 volume for models
-      - name: s3-models
-        persistentVolumeClaim:
-          claimName: comfyui-models-pvc
+      # NVMe hostPath for models
+      - name: nvme-host
+        hostPath:
+          path: /opt/dlami/nvme/comfyui-models
+          type: DirectoryOrCreate
 

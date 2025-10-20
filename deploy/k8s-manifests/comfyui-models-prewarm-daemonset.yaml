@@ -1,0 +1,65 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: comfyui-models-prewarm-sa
+  namespace: default
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: comfyui-models-prewarm
+  namespace: default
+  labels:
+    app: comfyui-models-prewarm
+spec:
+  selector:
+    matchLabels:
+      app: comfyui-models-prewarm
+  template:
+    metadata:
+      labels:
+        app: comfyui-models-prewarm
+    spec:
+      serviceAccountName: comfyui-models-prewarm-sa
+      nodeSelector:
+        workload: gpu
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: s5cmd
+        image: ghcr.io/peak/s5cmd:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -e
+            mkdir -p /opt/dlami/nvme/comfyui-models
+            # Large-scale, high-concurrency sync from S3 to local NVMe
+            # Adjust bucket/prefix as needed
+            s5cmd --concurrency=64 sync \
+              s3://comfyui-models-bucket-687912291502/models/ \
+              /opt/dlami/nvme/comfyui-models/
+            echo "[s5cmd] sync finished" && sleep infinity
+        env:
+        - name: AWS_REGION
+          value: "us-west-2"
+        volumeMounts:
+        - name: nvme-host
+          mountPath: /opt/dlami/nvme/comfyui-models
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+      volumes:
+      - name: nvme-host
+        hostPath:
+          path: /opt/dlami/nvme/comfyui-models
+          type: DirectoryOrCreate
+      terminationGracePeriodSeconds: 30
+

@@ -18,7 +18,8 @@ spec:
     volumeHandle: comfyui-models-bucket-687912291502  # Your S3 bucket name
     volumeAttributes:
       bucketName: comfyui-models-bucket-687912291502
-      cache: /opt/dlami/nvme
+      cache: emptyDir
+      cacheEmptyDirSizeLimit: 60Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
