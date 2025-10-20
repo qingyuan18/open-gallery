@@ -11,11 +11,14 @@ spec:
   mountOptions:
     - allow-delete
     - region us-west-2
+    - metadata-ttl 20
   csi:
     driver: s3.csi.aws.com
     volumeHandle: open-gallery-files-bucket-687912291502  # S3 bucket name for Open Gallery files
     volumeAttributes:
       bucketName: open-gallery-files-bucket-687912291502
+      cache: emptyDir
+      cacheEmptyDirSizeLimit: 10Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

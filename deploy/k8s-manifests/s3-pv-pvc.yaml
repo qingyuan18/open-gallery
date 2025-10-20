@@ -12,11 +12,14 @@ spec:
     - allow-delete
     - region us-west-2
     - prefix models/
+    - metadata-ttl 20
   csi:
     driver: s3.csi.aws.com
     volumeHandle: comfyui-models-bucket-687912291502  # Your S3 bucket name
     volumeAttributes:
       bucketName: comfyui-models-bucket-687912291502
+      cache: emptyDir
+      cacheEmptyDirSizeLimit: 10Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

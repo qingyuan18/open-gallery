@@ -81,6 +81,37 @@ kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml     # Open Gallery
 kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' && echo
 ```
 
+## 启用 S3 CSI 缓存（emptyDir + metadata-ttl 20s）
+
+说明：已在 `k8s-manifests/s3-pv-pvc.yaml` 与 `k8s-manifests/open-gallery-files-pv-pvc.yaml` 中启用 emptyDir 本地缓存并设置 metadata-ttl 为 20 秒（同时为 emptyDir 设置大小上限）。对已部署与未部署环境均可按以下“删除并重建 PV/PVC”的通用步骤生效：
+
+```bash
+# 1) 暂停依赖这些 PVC 的工作负载（可选，如果已部署）
+kubectl scale deployment/comfyui --replicas=0 || true
+kubectl scale deployment/open-gallery --replicas=0 || true
+
+# 2) 删除旧的 PV/PVC（不会影响 S3 中的数据）
+kubectl delete -f k8s-manifests/s3-pv-pvc.yaml --ignore-not-found
+kubectl delete -f k8s-manifests/open-gallery-files-pv-pvc.yaml --ignore-not-found
+
+# 3) 重新创建 PV/PVC（包含缓存配置）
+kubectl apply -f k8s-manifests/s3-pv-pvc.yaml
+kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml
+
+# 4) 等待 PVC 绑定
+echo 'Waiting 5s for PVC to bind...' && sleep 5
+kubectl get pvc
+
+# 5) 重新拉起工作负载（如果此前有部署）
+kubectl rollout restart deployment/comfyui || true
+kubectl rollout restart deployment/open-gallery || true
+```
+
+注意：
+- emptyDir 缓存是节点本地的临时空间，Pod 迁移到其他节点时缓存会重建；
+- 如需更大/持久/高 IOPS 缓存，可参考 Mountpoint CSI Driver 仓库的 docs/CACHING.md 中的 ephemeral（EBS/本地 NVMe）方案。
+
+
 
 **权限分离**
 

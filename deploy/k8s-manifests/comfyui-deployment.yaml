@@ -54,10 +54,12 @@ spec:
             nvidia.com/gpu: 1
             memory: "32Gi"
             cpu: "8"
+            ephemeral-storage: "20Gi"
           requests:
             nvidia.com/gpu: 1
             memory: "16Gi"
             cpu: "4"
+            ephemeral-storage: "8Gi"
         # Health checks
         livenessProbe:
           httpGet:
