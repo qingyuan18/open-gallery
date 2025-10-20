@@ -70,7 +70,7 @@ kubectl get nodes -L workload
 
 
     # 3.4) 构建并推送 DaemonSet 预热镜像（s5cmd+boto3）
-    ./scripts/build-and-push.sh --app deamonSet-s3-sync
+    ./scripts/build-and-push.sh --app daemonset-s3-sync
 
     # 3.5) 关联 NVMe 预热 DaemonSet 的 Pod Identity 并部署（s5cmd）
     export CLUSTER_NAME=hp-eks-03

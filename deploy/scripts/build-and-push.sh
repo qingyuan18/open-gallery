@@ -7,7 +7,7 @@
 #   ./build-and-push.sh [OPTIONS]
 #
 # Options:
-#   --app <name>          Application to build: open-gallery, comfyui-s3, deamonSet-s3-sync, all (default: all)
+#   --app <name>          Application to build: open-gallery, comfyui-s3, daemonset-s3-sync, all (default: all)
 #   --tag <tag>           Image tag (default: latest)
 #   --region <region>     AWS region (default: us-west-2)
 #   --help                Show this help message
@@ -81,9 +81,9 @@ parse_arguments() {
     done
 
     # Validate app name
-    if [[ ! "$APP_TO_BUILD" =~ ^(open-gallery|comfyui-s3|deamonSet-s3-sync|all)$ ]]; then
+    if [[ ! "$APP_TO_BUILD" =~ ^(open-gallery|comfyui-s3|daemonset-s3-sync|all)$ ]]; then
         print_error "Invalid app name: $APP_TO_BUILD"
-        print_error "Valid options: open-gallery, comfyui-s3, deamonSet-s3-sync, all"
+        print_error "Valid options: open-gallery, comfyui-s3, daemonset-s3-sync, all"
         exit 1
     fi
 }
@@ -233,8 +233,8 @@ display_summary() {
         print_info "ComfyUI (S3): ${ECR_REGISTRY}/comfyui-s3:${IMAGE_TAG}"
     fi
 
-    if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "deamonSet-s3-sync" ]; then
-        print_info "DaemonSet S3 Sync: ${ECR_REGISTRY}/deamonSet-s3-sync:${IMAGE_TAG}"
+    if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "daemonset-s3-sync" ]; then
+        print_info "DaemonSet S3 Sync: ${ECR_REGISTRY}/daemonset-s3-sync:${IMAGE_TAG}"
     fi
 
     print_info "========================================="
@@ -253,7 +253,7 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --app <name>      Application to build (default: all)"
-    echo "                    Options: open-gallery, comfyui-s3, all"
+    echo "                    Options: open-gallery, comfyui-s3, daemonset-s3-sync, all"
     echo "  --tag <tag>       Image tag (default: latest)"
     echo "  --region <region> AWS region (default: us-west-2)"
     echo "  --help            Show this help message"
@@ -262,7 +262,7 @@ show_usage() {
     echo "  $0                                    # Build all images"
     echo "  $0 --app open-gallery                 # Build only open-gallery"
     echo "  $0 --app comfyui-s3                   # Build ComfyUI S3 version"
-    echo "  $0 --app deamonSet-s3-sync            # Build DaemonSet S3 sync image (s5cmd+boto3)"
+    echo "  $0 --app daemonset-s3-sync            # Build DaemonSet S3 sync image (s5cmd+boto3)"
     echo "  $0 --app comfyui-s3 --tag v1.0        # Build ComfyUI S3 with tag v1.0"
     echo ""
     echo "Note: ComfyUI uses S3 mode only. Models are mounted from S3 at runtime."
@@ -297,10 +297,10 @@ main() {
             "."
     fi
 
-    if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "deamonSet-s3-sync" ]; then
-        build_and_push_app "deamonSet-s3-sync" \
-            "deploy/deamonSet-s3-sync.dockerfile" \
-            "deamonSet-s3-sync" \
+    if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "daemonset-s3-sync" ]; then
+        build_and_push_app "daemonset-s3-sync" \
+            "deploy/daemonset-s3-sync.dockerfile" \
+            "daemonset-s3-sync" \
             "."
     fi
 
