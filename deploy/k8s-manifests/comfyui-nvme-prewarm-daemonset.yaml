@@ -31,7 +31,7 @@ spec:
         workload: gpu
       containers:
       - name: prewarm
-        image: ghcr.io/peak/s5cmd:latest
+        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/deamonSet-s3-sync:latest
         imagePullPolicy: IfNotPresent
         command: ["/bin/sh", "-lc"]
         # 说明：

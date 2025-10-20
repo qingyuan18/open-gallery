@@ -69,24 +69,34 @@ kubectl get nodes -o json | jq -r '.items[] | select(.metadata.labels."node.kube
 kubectl get nodes -L workload
 
 
+    # 3.4) 构建并推送 DaemonSet 预热镜像（s5cmd+boto3）
+    ./scripts/build-and-push.sh --app deamonSet-s3-sync
+
     # 3.5) 关联 NVMe 预热 DaemonSet 的 Pod Identity 并部署（s5cmd）
     export CLUSTER_NAME=hp-eks-03
 
-    # 查找现有 S3 CSI 的 Role ARN（优先 EKS Pod Identity，其次 IRSA 注解）
+    # 查找现有 S3 CSI 的 Role ARN（优先 EKS Pod Identity 的 describe，其次 IRSA 注解）
     export S3_CSI_NS=kube-system
     export S3_CSI_SA=s3-csi-driver-sa
-    export S3_CSI_ROLE_ARN=$(aws eks list-pod-identity-associations \
+    export S3_CSI_ASSOC_ID=$(aws eks list-pod-identity-associations \
         --cluster-name $CLUSTER_NAME \
         --namespace $S3_CSI_NS \
         --service-account $S3_CSI_SA \
-        --query 'associations[0].roleArn' \
+        --query 'associations[0].associationId' \
         --output text 2>/dev/null || true)
+    if [ -n "$S3_CSI_ASSOC_ID" ] && [ "$S3_CSI_ASSOC_ID" != "None" ]; then
+      export S3_CSI_ROLE_ARN=$(aws eks describe-pod-identity-association \
+          --cluster-name $CLUSTER_NAME \
+          --association-id $S3_CSI_ASSOC_ID \
+          --query 'association.roleArn' \
+          --output text 2>/dev/null || true)
+    fi
     if [ -z "$S3_CSI_ROLE_ARN" ] || [ "$S3_CSI_ROLE_ARN" = "None" ]; then
       S3_CSI_ROLE_ARN=$(kubectl -n $S3_CSI_NS get sa $S3_CSI_SA -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}' 2>/dev/null || true)
     fi
     echo "S3_CSI_ROLE_ARN=$S3_CSI_ROLE_ARN"
 
-    # 关联 default/comfyui-prewarm-sa 到该 Role（可复用同一 Role）
+    # 先关联 default/comfyui-prewarm-sa 到该 Role（可复用同一 Role）
     aws eks create-pod-identity-association \
         --cluster-name $CLUSTER_NAME \
         --namespace default \
@@ -94,8 +104,10 @@ kubectl get nodes -L workload
         --role-arn $S3_CSI_ROLE_ARN
 
     # 重新部署（若存在旧版本先删除）
-    kubectl delete -f k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml --ignore-not-found
-    kubectl apply -f k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml
+    export AWS_REGION=${AWS_REGION:-us-west-2}
+    export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    envsubst < k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml | kubectl delete -f - --ignore-not-found
+    envsubst < k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml | kubectl apply  -f -
 
     # 检查 DaemonSet 与日志（每个 workload=gpu 节点应有 1 个 Pod）
     kubectl -n default get ds,pods -l app=comfyui-nvme-prewarm
@@ -221,7 +233,7 @@ kubectl get pod -l app=open-gallery -o yaml | grep serviceAccountName
 
 # 3. 检查 Pod Identity Association
 aws eks list-pod-identity-associations \
-    --cluster-name your-cluster-name \
+    --cluster-name hp-eks-03 \
     --namespace default \
     --service-account open-gallery-sa
 
