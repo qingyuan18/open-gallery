@@ -30,6 +30,22 @@ spec:
       # - key: nvidia.com/gpu
       #   operator: Exists
       #   effect: NoSchedule
+      initContainers:
+      - name: warm-s3-cache
+        image: nicolaka/netshoot
+        command: ["bash", "-lc"]
+        args:
+        - |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          for f in /opt/program/models/**/*.safetensors; do
+            dd if="$f" of=/dev/null bs=64M status=none || true
+          done
+        volumeMounts:
+        - name: s3-models
+          mountPath: /opt/program/models
+          readOnly: true
+
       containers:
       - name: comfyui
         # S3 mount version - smaller image, requires S3 CSI driver
@@ -52,14 +68,14 @@ spec:
         resources:
           limits:
             nvidia.com/gpu: 1
-            memory: "32Gi"
-            cpu: "8"
-            ephemeral-storage: "80Gi"
+            memory: "56Gi"
+            cpu: "12"
+            ephemeral-storage: "260Gi"
           requests:
             nvidia.com/gpu: 1
-            memory: "16Gi"
-            cpu: "4"
-            ephemeral-storage: "40Gi"
+            memory: "32Gi"
+            cpu: "8"
+            ephemeral-storage: "100Gi"
         # Health checks
         livenessProbe:
           httpGet:
@@ -83,7 +99,7 @@ spec:
         - name: s3-models
           mountPath: /opt/program/models
           readOnly: true
-        
+
         # Environment variables
         env:
         - name: NVIDIA_VISIBLE_DEVICES
@@ -105,7 +121,7 @@ spec:
         #       key: secret-access-key
         # - name: AWS_DEFAULT_REGION
         #   value: "us-west-2"
-      
+
       # Volumes
       volumes:
       # S3 volume for models
