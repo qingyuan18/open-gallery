@@ -42,7 +42,7 @@ spec:
         - |
           set -e
           mkdir -p /opt/dlami/nvme/comfyui-models
-          S3_SRC="s3://comfyui-models-bucket-687912291502/models/"
+          S3_SRC="s3://comfyui-models-bucket-687912291502/models/*"
           DST="/opt/dlami/nvme/comfyui-models/"
           echo "[s5cmd] syncing: ${S3_SRC} -> ${DST}"
           s5cmd sync "${S3_SRC}" "${DST}"

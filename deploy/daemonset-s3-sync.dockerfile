@@ -3,7 +3,7 @@
 
 FROM python:3.11-alpine
 
-ARG S5CMD_VERSION=2.2.2
+ARG S5CMD_VERSION=2.4.0
 
 # Install runtime deps and tools
 RUN apk add --no-cache bash curl ca-certificates unzip jq && \

@@ -195,6 +195,12 @@ kubectl apply -f k8s-manifests/s3-pv-pvc.yaml
 kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml
 ```
 
+### DaemonSet 日志排查
+```bash
+kubectl -n default logs -l app=comfyui-nvme-prewarm --tail=50 --all-containers
+```
+
+
 ### ALB 未创建
 
 ```bash
