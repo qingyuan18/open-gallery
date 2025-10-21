@@ -35,7 +35,7 @@ spec:
       containers:
       - name: prewarm
         image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/daemonset-s3-sync:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         command: ["/bin/sh", "-lc"]
         # 说明：
         # 1) 创建本地目录

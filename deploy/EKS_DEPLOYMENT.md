@@ -71,6 +71,7 @@ kubectl get nodes -L workload
 
     # 3.4) 构建并推送 DaemonSet 预热镜像（AWS CLI + boto3）
     ./scripts/build-and-push.sh --app daemonset-s3-sync
+    # DaemonSet 镜像使用 latest 标签；已在 YAML 中设置 imagePullPolicy: Always 以强制拉取最新镜像
 
     # 3.5) 关联 NVMe 预热 DaemonSet 的 Pod Identity 并部署（AWS CLI）
     export CLUSTER_NAME=hp-eks-03
