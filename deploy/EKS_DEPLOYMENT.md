@@ -69,10 +69,10 @@ kubectl get nodes -o json | jq -r '.items[] | select(.metadata.labels."node.kube
 kubectl get nodes -L workload
 
 
-    # 3.4) 构建并推送 DaemonSet 预热镜像（s5cmd+boto3）
+    # 3.4) 构建并推送 DaemonSet 预热镜像（AWS CLI + boto3）
     ./scripts/build-and-push.sh --app daemonset-s3-sync
 
-    # 3.5) 关联 NVMe 预热 DaemonSet 的 Pod Identity 并部署（s5cmd）
+    # 3.5) 关联 NVMe 预热 DaemonSet 的 Pod Identity 并部署（AWS CLI）
     export CLUSTER_NAME=hp-eks-03
 
     # 查找现有 S3 CSI 的 Role ARN（优先 EKS Pod Identity 的 describe，其次 IRSA 注解）

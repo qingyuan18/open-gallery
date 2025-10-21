@@ -6,6 +6,9 @@ metadata:
   namespace: default
   labels:
     app: comfyui-nvme-prewarm
+  annotations:
+    # IRSA annotation - 复用 S3 CSI 的 IAM Role（同时支持 Pod Identity 和 IRSA）
+    eks.amazonaws.com/role-arn: arn:aws:iam::687912291502:role/AmazonEKSPodIdentityAmazonS3MountpointCSI-Role
   # 如果使用 EKS Pod Identity，请将此 ServiceAccount 关联到具备只读 S3 权限的 IAM Role（与 s3 csi 类似的最小权限）：
   # - s3:ListBucket (针对 comfyui-models-bucket-687912291502)
   # - s3:GetObject   (针对 comfyui-models-bucket-687912291502/models/*)
@@ -42,11 +45,11 @@ spec:
         - |
           set -e
           mkdir -p /opt/dlami/nvme/comfyui-models
-          S3_SRC="s3://comfyui-models-bucket-687912291502/models/*"
+          S3_SRC="s3://comfyui-models-bucket-687912291502/models/"
           DST="/opt/dlami/nvme/comfyui-models/"
-          echo "[s5cmd] syncing: ${S3_SRC} -> ${DST}"
-          s5cmd sync "${S3_SRC}" "${DST}"
-          echo "[s5cmd] sync completed"
+          echo "[awscli] syncing: ${S3_SRC} -> ${DST}"
+          aws s3 sync "${S3_SRC}" "${DST}"
+          echo "[awscli] sync completed"
           sleep infinity
         env:
         - name: AWS_REGION
