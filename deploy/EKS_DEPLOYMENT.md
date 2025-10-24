@@ -127,6 +127,170 @@ kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml     # Open Gallery
 kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' && echo
 ```
 
+## KEDA + CloudWatch（无 Prometheus）按 ComfyUI 队列长度自动扩缩
+
+说明：本方案不改动应用代码，通过在 ComfyUI Pod 内增加一个 Sidecar 容器，定期从本地接口获取队列长度，并把指标写入 CloudWatch；KEDA 使用 CloudWatch Scaler 拉取该指标并驱动 HPA 扩缩。节点层扩容由 Karpenter/Cluster Autoscaler 处理。
+
+- 队列来源（ComfyUI 最新接口）：`GET http://127.0.0.1:8188/queue`，响应中包含 `queue_pending` 与 `queue_running` 两个数组；扩缩基于 `len(queue_pending)`。
+- CloudWatch 指标约定：Namespace=`ComfyUI`，MetricName=`QueuePending`，Dimension=`Deployment=comfyui`。
+
+### 先决条件
+- 集群侧已安装 CloudWatch（Container Insights 或可写入 CloudWatch 的权限环境）
+- 已有节点自动伸缩组件（Karpenter 或 Cluster Autoscaler）
+- 建议安装 KEDA（Operator + Metrics Adapter）：Helm 一条命令见下文
+
+### 步骤 1：构建并推送 Sidecar 镜像（将队列写入 CloudWatch）
+
+```bash
+# 在仓库根目录执行
+export AWS_REGION=${AWS_REGION:-us-west-2}
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+# 确保本账户登录了 ECR
+aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR
+
+# 创建仓库（若不存在）
+aws ecr describe-repositories --repository-names comfyui-queue-metrics --region $AWS_REGION >/dev/null 2>&1 || \
+aws ecr create-repository --repository-name comfyui-queue-metrics --region $AWS_REGION >/dev/null
+
+# 构建并推送
+docker build -f deploy/comfyui-queue-metrics.dockerfile -t $ECR/comfyui-queue-metrics:latest .
+docker push $ECR/comfyui-queue-metrics:latest
+```
+
+该镜像运行 `deploy/scripts/comfyui_queue_metrics.py`：定期请求 `http://127.0.0.1:8188/queue`，将 `len(queue_pending)` 写入 CloudWatch。
+
+### 步骤 2：为 comfyui-sa 配置 Pod Identity（授予 PutMetricData）
+
+```bash
+cd deploy
+./scripts/setup-comfyui-cloudwatch-pod-identity.sh \
+  --cluster-name <your-eks-cluster> \
+  --region ${AWS_REGION}
+```
+
+脚本会：
+- 创建/更新 IAM Policy（仅允许向 Namespace `ComfyUI` 写自定义指标）
+- 创建/更新 IAM Role（信任 pods.eks.amazonaws.com）
+- 关联 `default/comfyui-sa` 与该 Role（EKS Pod Identity Association）
+
+### 步骤 3：部署包含 Sidecar 的 ComfyUI Deployment
+
+已在 `k8s-manifests/comfyui-deployment.yaml` 中加入：
+- `serviceAccountName: comfyui-sa`
+- Sidecar 容器 `comfyui-cw-metrics`，默认每 10s 写一次 CloudWatch 指标
+
+使用项目脚本部署（会自动 envsubst 镜像地址）：
+```bash
+cd deploy
+./scripts/build-and-push.sh --app comfyui-s3   # 若镜像已存在可跳过
+./scripts/deploy-to-eks.sh
+```
+
+注意：若选择使用 KEDA，请不要在脚本交互中启用内置 HPA（避免与 KEDA 的 HPA 冲突）。
+
+### 步骤 4：安装 KEDA（如未安装）
+
+```bash
+helm repo add kedacore https://kedacore.github.io/charts
+helm repo update
+helm upgrade --install keda kedacore/keda -n keda --create-namespace
+# 验证
+kubectl -n keda get deploy keda-operator
+```
+
+### 步骤 5：应用 KEDA ScaledObject（CloudWatch Scaler）
+
+`k8s-manifests/comfyui-keda-scaledobject.yaml` 已提供示例，使用 CloudWatch 指标驱动扩缩：
+
+```bash
+# 使用当前环境中的 AWS_REGION 渲染后应用
+cd deploy/k8s-manifests
+envsubst '${AWS_REGION}' < comfyui-keda-scaledobject.yaml | kubectl apply -f -
+
+# 查看 KEDA 状态
+kubectl get scaledobject comfyui-cw-scaler -n default
+kubectl describe scaledobject comfyui-cw-scaler -n default
+kubectl -n keda logs deploy/keda-operator --tail=100
+```
+
+关键字段说明：
+- `targetMetricValue: "1"` 表示目标“每个 Pod 平均排队数为 1”，超过触发扩容；可按业务调小以提早扩容（GPU 冷启动较慢）。
+- `maxReplicaCount: 10` 按需调整上限。
+- `cooldownPeriod / stabilizationWindowSeconds` 较大，避免频繁缩容造成抖动。
+- 本示例使用 `identityOwner: pod`，即通过 `comfyui-sa` 的 Pod Identity 调用 CloudWatch `GetMetricData`，无需给 KEDA Operator 额外授权。
+
+### ComfyUI 队列 API 参考
+- 端点：`GET /queue`
+- 典型响应：`{"queue_running": [...], "queue_pending": [...]}`
+- 队列长度取值：`len(queue_pending)`
+
+### 常见问题排查（KEDA + CloudWatch）
+- CloudWatch 未见到指标：检查 Sidecar 日志 `kubectl logs -l app=comfyui -c comfyui-cw-metrics`；确认 Pod Identity 关联成功，Region 环境变量已注入。
+- KEDA 不扩容：`kubectl describe scaledobject` 查看触发器状态；同时查看 `keda-operator` 日志是否能正常 `GetMetricData`。
+- 扩容但 Pending：说明节点不足，应由 Karpenter/Cluster Autoscaler 扩节点；请检查 Karpenter Provisioner/NodePool 以及 GPU 机型可用性。
+
+
+## Karpenter GPU NodePool 最小配置（与 KEDA 协同）
+
+说明：当 KEDA/HPA 将 ComfyUI 副本扩到现有节点无法容纳时，Karpenter 会基于 Pending/Unschedulable Pod 的资源与调度约束供给新的 GPU 节点；当副本缩减后，Karpenter 会按 WhenEmptyOrUnderutilized 合并与回收空/低利用节点，遵守 PDB 与扰动预算。
+
+- 清单位置：
+  - deploy/k8s-manifests/karpenter-ec2nodeclass-gpu.yaml
+  - deploy/k8s-manifests/karpenter-nodepool-gpu.yaml
+- 与现有部署的契合点：NodePool 会为新节点加上 label `workload=gpu`，与 comfyui-deployment.yaml 的 `nodeSelector` 完全匹配；默认不加 taint，避免改动现有 Deployment。
+
+### 先决条件
+- Karpenter 已安装且 CRD 就绪（v1 API）：
+  ```bash
+  kubectl get crd ec2nodeclasses.karpenter.k8s.aws nodepools.karpenter.sh
+  ```
+- 集群的子网与安全组带有发现标签（安装 Karpenter 时通常已配置）：
+  - `karpenter.sh/discovery: <CLUSTER_NAME>`
+- IAM：存在 `KarpenterNodeRole-<CLUSTER_NAME>`（或自管的 InstanceProfile）。
+
+### 应用最小 GPU NodeClass/NodePool
+```bash
+export CLUSTER_NAME=<your-eks-cluster>
+cd deploy/k8s-manifests
+# 1) EC2NodeClass（按集群名渲染标签选择器与角色名）
+envsubst '${CLUSTER_NAME}' < karpenter-ec2nodeclass-gpu.yaml | kubectl apply -f -
+# 2) NodePool（无占位变量，直接应用）
+kubectl apply -f karpenter-nodepool-gpu.yaml
+```
+
+说明与默认值：
+- EC2NodeClass 使用 `amiFamily: AL2`，对 GPU 机型会自动解析 GPU 版 EKS 优化 AMI；并将根盘放大到 200Gi，以容纳 `/opt/dlami/nvme/comfyui-models` 的本地缓存（由预热 DaemonSet 同步）。
+- NodePool 仅约束 `instance-family ∈ {g5,g6e}`、`arch=amd64`、`os=linux`、`capacity-type=on-demand`。如需节省成本，可将 capacity-type 改为 `spot`（留意突发中断）。
+- 扰动策略：`consolidationPolicy: WhenEmptyOrUnderutilized`，`consolidateAfter: 2m`，`budgets: 10%`，避免与 KEDA 缩容造成抖动。
+
+### 验证
+```bash
+# 1) 触发扩容（例如把队列打满或临时手动扩副本以产生 Pending）
+kubectl scale deploy/comfyui --replicas=3
+# 2) 观察 Karpenter 供给节点与调度
+kubectl get node -w -L workload,karpenter.sh/nodepool
+# 3) 观察 Karpenter 事件/日志（可选）
+kubectl -n karpenter logs deploy/karpenter --tail=200
+```
+
+### 可选：与可用性保护搭配
+- 建议为 ComfyUI 增加 PDB（示例：3 副本时至少保 2）：
+  ```yaml
+  apiVersion: policy/v1
+  kind: PodDisruptionBudget
+  metadata:
+    name: comfyui-pdb
+  spec:
+    minAvailable: 2
+    selector:
+      matchLabels:
+        app: comfyui
+  ```
+- 若后续希望隔离 GPU 节点，给 NodePool 加 taint `nvidia.com/gpu=true:NoSchedule`，同时在 Deployment 增加相应 tolerations。
+
+
 ## 启用 S3 CSI 缓存（emptyDir + metadata-ttl 20s）
 
 说明：已在 `k8s-manifests/s3-pv-pvc.yaml` 与 `k8s-manifests/open-gallery-files-pv-pvc.yaml` 中启用 emptyDir 本地缓存并设置 metadata-ttl 为 20 秒（同时为 emptyDir 设置大小上限）。对已部署与未部署环境均可按以下“删除并重建 PV/PVC”的通用步骤生效：

@@ -1,0 +1,45 @@
+# Minimal GPU NodePool that matches ComfyUI's nodeSelector (workload=gpu)
+# and works hand-in-hand with KEDA-driven pod scaling.
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: gpu
+spec:
+  template:
+    metadata:
+      # Ensure new nodes carry the label required by ComfyUI Deployment
+      labels:
+        workload: "gpu"
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: gpu
+      # No taints here to avoid changing current Deployment. If you later
+      # add a GPU taint, remember to add matching tolerations to workloads.
+      requirements:
+        # Architecture/OS
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        # GPU instance families (adjust as needed)
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: ["g5", "g6e"]
+        # Capacity type: default to on-demand for stability; change to ["spot"] if desired
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+  disruption:
+    # Consider empty or underutilized nodes for consolidation (cost reduction)
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    # Wait a bit after pods are added/removed to avoid churn with KEDA scale-down
+    consolidateAfter: 2m
+    # Limit parallel voluntary disruptions
+    budgets:
+    - nodes: "10%"
+

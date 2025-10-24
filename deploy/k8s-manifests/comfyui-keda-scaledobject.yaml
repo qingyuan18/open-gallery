@@ -1,0 +1,40 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: comfyui-cw-scaler
+  namespace: default
+  labels:
+    app: comfyui
+spec:
+  scaleTargetRef:
+    name: comfyui
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  cooldownPeriod: 180         # seconds to wait before scaling down (GPU nodes are slow to spin up)
+  pollingInterval: 15         # how often KEDA polls CloudWatch
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 300
+  triggers:
+  - type: aws-cloudwatch
+    metadata:
+      namespace: "ComfyUI"
+      metricName: "QueuePending"
+      # We publish one metric per Deployment (same dimension across all pods)
+      dimensionName: "Deployment"
+      dimensionValue: "comfyui"
+      targetMetricValue: "1"          # target average pending items per pod
+      activationTargetMetricValue: "0.5"
+      minMetricValue: "0"
+      ignoreNullValues: "true"
+      metricStat: "Average"
+      metricStatPeriod: "60"
+      metricCollectionTime: "180"
+      metricEndTimeOffset: "60"
+      awsRegion: "${AWS_REGION}"
+      identityOwner: pod               # use comfyui-sa Pod Identity to read CloudWatch metrics
+

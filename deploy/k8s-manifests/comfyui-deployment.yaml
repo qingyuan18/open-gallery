@@ -23,6 +23,8 @@ spec:
         app: comfyui
         version: v1
     spec:
+      serviceAccountName: comfyui-sa
+
       nodeSelector:
         workload: gpu
       # Optional: Use tolerations if you have taints on GPU nodes
@@ -106,6 +108,34 @@ spec:
         #       key: secret-access-key
         # - name: AWS_DEFAULT_REGION
         #   value: "us-west-2"
+
+      - name: comfyui-cw-metrics
+        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/comfyui-queue-metrics:latest
+        imagePullPolicy: Always
+        env:
+        - name: AWS_DEFAULT_REGION
+          value: "${AWS_REGION}"
+        - name: COMFYUI_QUEUE_URL
+          value: "http://127.0.0.1:8188/queue"
+        - name: METRIC_NAMESPACE
+          value: "ComfyUI"
+        - name: METRIC_NAME
+          value: "QueuePending"
+        - name: METRIC_DIMENSION_NAME
+          value: "Deployment"
+        - name: METRIC_DIMENSION_VALUE
+          value: "comfyui"
+        - name: POLL_INTERVAL_SEC
+          value: "10"
+        - name: PUBLISH_TOTAL
+          value: "false"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
 
       # Volumes
       volumes:

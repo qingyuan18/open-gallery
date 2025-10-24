@@ -1,0 +1,36 @@
+# Minimal EC2NodeClass for GPU nodes provisioned by Karpenter
+# Usage:
+#   export CLUSTER_NAME=<your-eks-cluster-name>
+#   envsubst '${CLUSTER_NAME}' < deploy/k8s-manifests/karpenter-ec2nodeclass-gpu.yaml | kubectl apply -f -
+---
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: gpu
+spec:
+  # Use EKS optimized Amazon Linux 2 AMI family.
+  # For GPU instance families, Karpenter will automatically resolve the GPU variant of the EKS-optimized AMI.
+  amiFamily: AL2
+
+  # One of role or instanceProfile is required. This assumes you installed Karpenter
+  # using the recommended AWS quickstart, which creates this role name.
+  role: "KarpenterNodeRole-${CLUSTER_NAME}"
+
+  # Discover subnets/security groups by tag. Make sure your cluster's
+  # subnets and security groups are tagged with karpenter.sh/discovery: <CLUSTER_NAME>
+  subnetSelectorTerms:
+  - tags:
+      karpenter.sh/discovery: "${CLUSTER_NAME}"
+  securityGroupSelectorTerms:
+  - tags:
+      karpenter.sh/discovery: "${CLUSTER_NAME}"
+
+  # Increase the root EBS volume so local model cache (e.g., /opt/dlami/nvme) has space.
+  blockDeviceMappings:
+  - deviceName: /dev/xvda
+    ebs:
+      volumeSize: 200Gi
+      volumeType: gp3
+      encrypted: true
+      deleteOnTermination: true
+
