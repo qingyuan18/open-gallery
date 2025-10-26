@@ -246,22 +246,29 @@ kubectl -n keda logs deploy/keda-operator --tail=100
   ```bash
   kubectl get crd ec2nodeclasses.karpenter.k8s.aws nodepools.karpenter.sh
   ```
-- 集群的子网与安全组带有发现标签（安装 Karpenter 时通常已配置）：
-  - `karpenter.sh/discovery: <CLUSTER_NAME>`
+- 网络：准备好用于工作节点的子网 ID（建议至少 2 个私有子网）与安全组 ID（无需 discovery 标签）。
 - IAM：存在 `KarpenterNodeRole-<CLUSTER_NAME>`（或自管的 InstanceProfile）。
 
 ### 应用最小 GPU NodeClass/NodePool
 ```bash
 export CLUSTER_NAME=<your-eks-cluster>
+# Required: set networking and DLAMI AMI for SageMaker HyperPod nodes
+export SUBNET_ID_1=subnet-xxxxxxxx
+export SUBNET_ID_2=subnet-yyyyyyyy
+export SG_ID_1=sg-aaaaaaaa
+export SG_ID_2=sg-bbbbbbbb
+# DLAMI recommended base OS: AL2023; EC2NodeClass pins amiFamily: AL2023
+export AMI_ID=ami-0abcde1234567890f  # DLAMI AMI ID
+
 cd deploy/k8s-manifests
-# 1) EC2NodeClass（按集群名渲染标签选择器与角色名）
-envsubst '${CLUSTER_NAME}' < karpenter-ec2nodeclass-gpu.yaml | kubectl apply -f -
+# 1) EC2NodeClass（改为按 ID 选择子网/安全组，且不再扩容根盘）
+envsubst '${CLUSTER_NAME} ${SUBNET_ID_1} ${SUBNET_ID_2} ${SG_ID_1} ${SG_ID_2} ${AMI_ID}' < karpenter-ec2nodeclass-gpu.yaml | kubectl apply -f -
 # 2) NodePool（无占位变量，直接应用）
 kubectl apply -f karpenter-nodepool-gpu.yaml
 ```
 
 说明与默认值：
-- EC2NodeClass 使用 `amiFamily: AL2`，对 GPU 机型会自动解析 GPU 版 EKS 优化 AMI；并将根盘放大到 200Gi，以容纳 `/opt/dlami/nvme/comfyui-models` 的本地缓存（由预热 DaemonSet 同步）。
+- EC2NodeClass 改为使用“ID 指定子网/安全组”；不再扩容根盘；并通过 amiSelectorTerms 固定到 DLAMI（amiFamily 固定为 AL2023）。若为非 SageMaker HyperPod 环境，可删除 amiSelectorTerms 配置以让 Karpenter 按 amiFamily 自动选择 EKS 优化（GPU）AMI。
 - NodePool 仅约束 `instance-family ∈ {g5,g6e}`、`arch=amd64`、`os=linux`、`capacity-type=on-demand`。如需节省成本，可将 capacity-type 改为 `spot`（留意突发中断）。
 - 扰动策略：`consolidationPolicy: WhenEmptyOrUnderutilized`，`consolidateAfter: 2m`，`budgets: 10%`，避免与 KEDA 缩容造成抖动。
 
