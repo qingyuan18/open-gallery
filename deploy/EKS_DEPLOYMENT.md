@@ -188,7 +188,7 @@ cd deploy
 ./scripts/deploy-to-eks.sh
 ```
 
-注意：若选择使用 KEDA，请不要在脚本交互中启用内置 HPA（避免与 KEDA 的 HPA 冲突）。
+注意：仓库已移除独立 HPA 清单，避免与 KEDA 生成的 HPA 冲突。
 
 ### 步骤 4：安装 KEDA（如未安装）
 

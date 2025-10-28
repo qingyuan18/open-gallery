@@ -261,22 +261,6 @@ tag_alb_security_groups() {
 }
 
 
-# Optional: Deploy HPA
-deploy_hpa() {
-    if [ "$AUTO_CONFIRM" = false ] && [ -t 0 ]; then
-        read -p "Do you want to deploy Horizontal Pod Autoscaler? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Deploying HPA..."
-            kubectl apply -f comfyui-hpa.yaml
-            print_info "HPA deployed successfully."
-        fi
-    elif [ "$AUTO_CONFIRM" = true ]; then
-        print_info "Auto-confirm: Skipping HPA deployment"
-    else
-        print_info "Skipping HPA deployment."
-    fi
-}
 
 # Verify deployment
 verify_deployment() {
@@ -433,7 +417,7 @@ main() {
     deploy_ingress
     wait_for_alb
     tag_alb_security_groups
-    deploy_hpa
+
     verify_deployment
     display_summary
     display_logs
