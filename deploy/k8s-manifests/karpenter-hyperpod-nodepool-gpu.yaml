@@ -1,0 +1,27 @@
+# HyperPod EKS: Minimal GPU NodePool that references HyperpodNodeClass
+# Works with KEDA/HPA: when pods are pending, Karpenter provisions GPU nodes from HyperPod InstanceGroups
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: gpu-hp
+spec:
+  template:
+    metadata:
+      labels:
+        # Ensure new nodes match ComfyUI's nodeSelector
+        workload: "gpu"
+    spec:
+      nodeClassRef:
+        group: karpenter.sagemaker.amazonaws.com
+        kind: HyperpodNodeClass
+        name: gpu-hp
+      expireAfter: Never
+      requirements:
+        # Keep minimal constraints; Karpenter will select instance type from the InstanceGroups
+        - key: node.kubernetes.io/instance-type
+          operator: Exists
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 2m
+

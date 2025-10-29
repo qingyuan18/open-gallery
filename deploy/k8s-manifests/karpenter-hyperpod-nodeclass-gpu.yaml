@@ -1,0 +1,18 @@
+# HyperPod EKS: Minimal HyperpodNodeClass for GPU autoscaling via managed Karpenter
+# Usage (pick your HyperPod InstanceGroups and apply with envsubst):
+#   export HP_INSTANCE_GROUP_1=<your-instance-group-1>
+#   export HP_INSTANCE_GROUP_2=<your-instance-group-2>   # optional
+#   envsubst '${HP_INSTANCE_GROUP_1} ${HP_INSTANCE_GROUP_2}' \
+#     < deploy/k8s-manifests/karpenter-hyperpod-nodeclass-gpu.yaml | kubectl apply -f -
+---
+apiVersion: karpenter.sagemaker.amazonaws.com/v1
+kind: HyperpodNodeClass
+metadata:
+  name: gpu-hp
+spec:
+  # Map to pre-created HyperPod InstanceGroups for GPU capacity
+  # Recommend setting those InstanceGroups' desired count to 0 and let Karpenter provision on demand
+  instanceGroups:
+  - ${HP_INSTANCE_GROUP_1}
+  - ${HP_INSTANCE_GROUP_2}
+

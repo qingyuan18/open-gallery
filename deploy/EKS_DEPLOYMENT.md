@@ -143,6 +143,7 @@ kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingr
 
 ```bash
 # 在仓库根目录执行
+export CLUSTER_NAME=hp-eks-03
 export AWS_REGION=${AWS_REGION:-us-west-2}
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
@@ -166,7 +167,7 @@ docker push $ECR/comfyui-queue-metrics:latest
 ```bash
 cd deploy
 ./scripts/setup-comfyui-cloudwatch-pod-identity.sh \
-  --cluster-name <your-eks-cluster> \
+  --cluster-name ${CLUSTER_NAME} \
   --region ${AWS_REGION}
 ```
 
@@ -237,9 +238,14 @@ kubectl -n keda logs deploy/keda-operator --tail=100
 说明：当 KEDA/HPA 将 ComfyUI 副本扩到现有节点无法容纳时，Karpenter 会基于 Pending/Unschedulable Pod 的资源与调度约束供给新的 GPU 节点；当副本缩减后，Karpenter 会按 WhenEmptyOrUnderutilized 合并与回收空/低利用节点，遵守 PDB 与扰动预算。
 
 - 清单位置：
-  - deploy/k8s-manifests/karpenter-ec2nodeclass-gpu.yaml
-  - deploy/k8s-manifests/karpenter-nodepool-gpu.yaml
+  - deploy/k8s-manifests/karpenter-ec2nodeclass-gpu.yaml   # 路径 A（普通 EKS / EC2 Provider）
+  - deploy/k8s-manifests/karpenter-nodepool-gpu.yaml        # 路径 A（普通 EKS / EC2 Provider）
+  - deploy/k8s-manifests/karpenter-hyperpod-nodeclass-gpu.yaml  # 路径 B（HyperPod EKS / 托管 Karpenter）
+  - deploy/k8s-manifests/karpenter-hyperpod-nodepool-gpu.yaml   # 路径 B（HyperPod EKS / 托管 Karpenter）
 - 与现有部署的契合点：NodePool 会为新节点加上 label `workload=gpu`，与 comfyui-deployment.yaml 的 `nodeSelector` 完全匹配；默认不加 taint，避免改动现有 Deployment。
+
+
+### 路径 A：普通 EKS（EC2 Provider）
 
 ### 先决条件
 - Karpenter 已安装且 CRD 就绪（v1 API）：
@@ -248,6 +254,108 @@ kubectl -n keda logs deploy/keda-operator --tail=100
   ```
 - 网络：准备好用于工作节点的子网 ID（建议至少 2 个私有子网）与安全组 ID（无需 discovery 标签）。
 - IAM：存在 `KarpenterNodeRole-<CLUSTER_NAME>`（或自管的 InstanceProfile）。
+
+
+### 路径 B：HyperPod EKS（托管 Karpenter，文件 apply）
+
+说明：SageMaker HyperPod（EKS 编排）提供“托管式 Karpenter”，无需在 EKS 内安装 Karpenter 控制器/Helm 图表。步骤：为 HyperPod 创建伸缩用 IAM 角色 → 使用 update-cluster 启用 Karpenter → 以文件方式应用 HyperpodNodeClass 与 NodePool。
+
+> 重要前提：该 HyperPod 集群在创建时启用了“连续供给（NodeProvisioningMode=Continuous）”，且 NodeRecovery=Automatic。
+
+1) 前提检查（NodeProvisioningMode / NodeRecovery / AutoScaling）
+```bash
+export HP_CLUSTER_NAME=<your-hyperpod-eks-cluster>
+aws sagemaker describe-cluster \
+  --cluster-name $HP_CLUSTER_NAME \
+  --query '{NodeProvisioningMode:NodeProvisioningMode,NodeRecovery:NodeRecovery,AutoScaling:AutoScaling}'
+# 需满足：NodeProvisioningMode=Continuous 且 NodeRecovery=Automatic
+```
+
+2) 创建用于 HyperPod 伸缩的 IAM 角色（一次性）
+```bash
+export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# Trust Policy：允许 HyperPod 假设此角色
+cat >/tmp/hp-karpenter-trust.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "hyperpod.sagemaker.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+
+# 创建 Role（若已存在可跳过）
+aws iam create-role \
+  --role-name SageMakerHyperPodKarpenterRole \
+  --assume-role-policy-document file:///tmp/hp-karpenter-trust.json || true
+
+# 最小权限：允许 HyperPod 执行节点增删（如你的环境使用自定义 KMS，可再增 KMS Grant 权限）
+cat >/tmp/hp-karpenter-policy.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": [
+      "sagemaker:BatchAddClusterNodes",
+      "sagemaker:BatchDeleteClusterNodes"
+    ],
+    "Resource": "arn:aws:sagemaker:*:*:cluster/*"
+  }]
+}
+EOF
+
+aws iam put-role-policy \
+  --role-name SageMakerHyperPodKarpenterRole \
+  --policy-name HyperPodKarpenterInline \
+  --policy-document file:///tmp/hp-karpenter-policy.json
+```
+
+3) 在现有 HyperPod EKS 集群上启用 Karpenter（UpdateCluster）
+```bash
+aws sagemaker update-cluster \
+  --cluster-name $HP_CLUSTER_NAME \
+  --auto-scaling Mode=Enable,AutoScalerType=Karpenter \
+  --cluster-role arn:aws:iam::${ACCOUNT_ID}:role/SageMakerHyperPodKarpenterRole
+
+# 验证 AutoScaling 状态
+aws sagemaker describe-cluster \
+  --cluster-name $HP_CLUSTER_NAME \
+  --query 'AutoScaling'
+```
+
+4) 应用 HyperPod 专用 NodeClass/NodePool（全部以文件 apply）
+```bash
+# 4.1) HyperpodNodeClass（请把 InstanceGroup 名称通过环境变量传入）
+export HP_INSTANCE_GROUP_1=<your-instance-group-1>
+export HP_INSTANCE_GROUP_2=<your-instance-group-2>  # 可选
+
+envsubst '${HP_INSTANCE_GROUP_1} ${HP_INSTANCE_GROUP_2}' \
+  < deploy/k8s-manifests/karpenter-hyperpod-nodeclass-gpu.yaml | kubectl apply -f -
+
+# 4.2) NodePool（引用上述 NodeClass；给新节点打上 workload=gpu 标签）
+kubectl apply -f deploy/k8s-manifests/karpenter-hyperpod-nodepool-gpu.yaml
+
+# 4.3) 验证 CR 就绪
+kubectl get crd hyperpodnodeclasses.karpenter.sagemaker.amazonaws.com nodepools.karpenter.sh
+kubectl get hyperpodnodeclasses.karpenter.sagemaker.amazonaws.com
+kubectl get nodepools.karpenter.sh
+```
+
+5) 触发与观察扩容（与 KEDA 协同）
+```bash
+# 触发 Pending（示例：临时扩副本）
+kubectl scale deploy/comfyui --replicas=3
+
+# 观察节点与调度
+echo '--- nodes (watch) ---'; kubectl get node -w -L workload,karpenter.sh/nodepool
+# 观察 Karpenter 控制器日志（可选）
+kubectl -n karpenter logs deploy/karpenter --tail=200
+```
+
+> 备注：HyperPod 托管 Karpenter 无需在 EKS 内安装 Karpenter Helm Chart/Add-on；若你的 EKS 曾安装“自管版 Karpenter”，请确保资源/CRD 不冲突（应使用 v1 的 NodePool/NodeClaim 族）。
 
 ### 应用最小 GPU NodeClass/NodePool
 ```bash
@@ -261,14 +369,13 @@ export SG_ID_2=sg-bbbbbbbb
 export AMI_ID=ami-0abcde1234567890f  # DLAMI AMI ID
 
 cd deploy/k8s-manifests
-# 1) EC2NodeClass（改为按 ID 选择子网/安全组，且不再扩容根盘）
+# 1) EC2NodeClass（按 ID 选择子网/安全组）
 envsubst '${CLUSTER_NAME} ${SUBNET_ID_1} ${SUBNET_ID_2} ${SG_ID_1} ${SG_ID_2} ${AMI_ID}' < karpenter-ec2nodeclass-gpu.yaml | kubectl apply -f -
 # 2) NodePool（无占位变量，直接应用）
 kubectl apply -f karpenter-nodepool-gpu.yaml
 ```
 
 说明与默认值：
-- EC2NodeClass 改为使用“ID 指定子网/安全组”；不再扩容根盘；并通过 amiSelectorTerms 固定到 DLAMI（amiFamily 固定为 AL2023）。若为非 SageMaker HyperPod 环境，可删除 amiSelectorTerms 配置以让 Karpenter 按 amiFamily 自动选择 EKS 优化（GPU）AMI。
 - NodePool 仅约束 `instance-family ∈ {g5,g6e}`、`arch=amd64`、`os=linux`、`capacity-type=on-demand`。如需节省成本，可将 capacity-type 改为 `spot`（留意突发中断）。
 - 扰动策略：`consolidationPolicy: WhenEmptyOrUnderutilized`，`consolidateAfter: 2m`，`budgets: 10%`，避免与 KEDA 缩容造成抖动。
 
@@ -345,7 +452,7 @@ kubectl rollout restart deployment/open-gallery || true
 
 ```bash
 # 查看 Pod 详细信息
-kubectl describe pod <pod-name>
+kubectl describe pod open-gallery-6cbf59457d-7mzrx
 
 # 查看 Pod 日志
 kubectl logs <pod-name>
