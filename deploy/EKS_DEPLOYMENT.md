@@ -37,6 +37,10 @@ kubectl get deployment -n kube-system aws-load-balancer-controller
 完整的部署流程如下：
 
 ```bash
+export CLUSTER_NAME=hp-eks
+export AWS_REGION=${AWS_REGION:-us-east-1}
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
 cd deploy
 
 # 0) 安装/验证 AWS Load Balancer Controller（使用 Pod Identity）
@@ -53,10 +57,15 @@ cd deploy
     --bucket open-gallery-files-bucket-687912291502 \
     --use-pod-identity
 
-# 2) 配置 Open Gallery Pod Identity（用于 DynamoDB/S3/Bedrock 访问）⭐ 新增
+# 2) 配置 Open Gallery Pod Identity（用于 DynamoDB/S3/Bedrock 访问）
 ./scripts/setup-open-gallery-pod-identity.sh \
-    --cluster-name <cluster-name> \
-    --region us-west-2
+    --cluster-name ${CLUSTER_NAME} \
+    --region ${AWS_REGION}
+
+# 配置 comfyui Pod Identity（用于 putMetricData 到 CloudWatch）
+./scripts/setup-comfyui-cloudwatch-pod-identity.sh \
+  --cluster-name ${CLUSTER_NAME} \
+  --region ${AWS_REGION}
 
 # 3) 为节点打标签（重要！）
 # GPU 节点
@@ -74,8 +83,6 @@ kubectl get nodes -L workload
     # DaemonSet 镜像使用 latest 标签；已在 YAML 中设置 imagePullPolicy: Always 以强制拉取最新镜像
 
     # 3.5) 关联 NVMe 预热 DaemonSet 的 Pod Identity 并部署（AWS CLI）
-    export CLUSTER_NAME=hp-eks-03
-
     # 查找现有 S3 CSI 的 Role ARN（优先 EKS Pod Identity 的 describe，其次 IRSA 注解）
     export S3_CSI_NS=kube-system
     export S3_CSI_SA=s3-csi-driver-sa
@@ -105,8 +112,6 @@ kubectl get nodes -L workload
         --role-arn $S3_CSI_ROLE_ARN
 
     # 重新部署（若存在旧版本先删除）
-    export AWS_REGION=${AWS_REGION:-us-west-2}
-    export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
     envsubst '${AWS_ACCOUNT_ID} ${AWS_REGION}' < k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml | kubectl delete -f - --ignore-not-found
     envsubst '${AWS_ACCOUNT_ID} ${AWS_REGION}' < k8s-manifests/comfyui-nvme-prewarm-daemonset.yaml | kubectl apply  -f -
 
@@ -143,7 +148,7 @@ kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingr
 
 ```bash
 # 在仓库根目录执行
-export CLUSTER_NAME=hp-eks-03
+export CLUSTER_NAME=hp-eks
 export AWS_REGION=${AWS_REGION:-us-west-2}
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
@@ -175,6 +180,60 @@ cd deploy
 - 创建/更新 IAM Policy（仅允许向 Namespace `ComfyUI` 写自定义指标）
 - 创建/更新 IAM Role（信任 pods.eks.amazonaws.com）
 - 关联 `default/comfyui-sa` 与该 Role（EKS Pod Identity Association）
+
+
+### 步骤 2.1：为 KEDA 启用 IRSA（workload 模式）
+
+KEDA 在 `identityOwner: workload` 模式下，会读取目标工作负载的 ServiceAccount（`comfyui-sa`）上的 IRSA 注解，通过 OIDC 以该 Role 身份访问 CloudWatch。
+
+1) 更新 `ComfyUICloudWatchRole` 的信任策略，增加 OIDC（保留原有 pods.eks.amazonaws.com 条目）：
+
+```bash
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export OIDC_PROVIDER=$(aws eks describe-cluster \
+  --name ${CLUSTER_NAME} \
+  --region ${AWS_REGION} \
+  --query "cluster.identity.oidc.issuer" \
+  --output text | sed 's|https://||')
+
+cat > /tmp/comfyui-irsa-trust.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {"Service": "pods.eks.amazonaws.com"},
+      "Action": ["sts:AssumeRole", "sts:TagSession"]
+    },
+    {
+      "Effect": "Allow",
+      "Principal": {"Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"},
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "${OIDC_PROVIDER}:sub": "system:serviceaccount:default:comfyui-sa",
+          "${OIDC_PROVIDER}:aud": "sts.amazonaws.com"
+
+        }
+      }
+    }
+  ]
+}
+EOF
+
+aws iam update-assume-role-policy \
+  --role-name ComfyUICloudWatchRole \
+  --policy-document file:///tmp/comfyui-irsa-trust.json
+```
+
+2) 应用带 IRSA 注解的 ServiceAccount（使用 envsubst 注入账户 ID）：
+
+```bash
+cd deploy/k8s-manifests
+envsubst '${AWS_ACCOUNT_ID}' < comfyui-serviceaccount.yaml | kubectl apply -f -
+```
+
+> 注：ComfyUI Pod 仍通过 EKS Pod Identity Association 获取写入 CloudWatch 的权限；KEDA 通过 IRSA 临时代入同一 Role 来读取指标。
 
 ### 步骤 3：部署包含 Sidecar 的 ComfyUI Deployment
 
@@ -208,8 +267,10 @@ kubectl -n keda get deploy keda-operator
 ```bash
 # 使用当前环境中的 AWS_REGION 渲染后应用
 cd deploy/k8s-manifests
+envsubst '${AWS_ACCOUNT_ID}' < comfyui-serviceaccount.yaml | kubectl apply -f -
 kubectl apply -f comfyui-keda-triggerauth.yaml
 
+kubectl delete scaledobject comfyui-cw-scaler -n default --ignore-not-found
 envsubst '${AWS_REGION}' < comfyui-keda-scaledobject.yaml | kubectl apply -f -
 
 # 查看 KEDA 状态
@@ -222,7 +283,7 @@ kubectl -n keda logs deploy/keda-operator --tail=100
 - `targetMetricValue: "1"` 表示目标“每个 Pod 平均排队数为 1”，超过触发扩容；可按业务调小以提早扩容（GPU 冷启动较慢）。
 - `maxReplicaCount: 10` 按需调整上限。
 - `cooldownPeriod / stabilizationWindowSeconds` 较大，避免频繁缩容造成抖动。
-- 本示例使用 TriggerAuthentication + Pod Identity（provider: aws-eks），即通过 `comfyui-sa` 的 Pod Identity 调用 CloudWatch `GetMetricData`，无需给 KEDA Operator 额外授权，也无需为 KEDA 新建 ServiceAccount。
+- 本示例使用 TriggerAuthentication（provider: aws, identityOwner: workload）基于 IRSA 代入工作负载的 ServiceAccount（`comfyui-sa`）对应的 IAM Role 来读取 CloudWatch；无需给 KEDA Operator 额外授权，也无需为 KEDA 新建 ServiceAccount。
 
 ### ComfyUI 队列 API 参考
 - 端点：`GET /queue`
@@ -266,7 +327,7 @@ kubectl -n keda logs deploy/keda-operator --tail=100
 
 1) 前提检查（NodeProvisioningMode / NodeRecovery / AutoScaling）
 ```bash
-export HP_CLUSTER_NAME=<your-hyperpod-eks-cluster>
+export HP_CLUSTER_NAME=hyperpod-cluster-eks01
 aws sagemaker describe-cluster \
   --cluster-name $HP_CLUSTER_NAME \
   --query '{NodeProvisioningMode:NodeProvisioningMode,NodeRecovery:NodeRecovery,AutoScaling:AutoScaling}'
@@ -331,7 +392,7 @@ aws sagemaker describe-cluster \
 4) 应用 HyperPod 专用 NodeClass/NodePool（全部以文件 apply）
 ```bash
 # 4.1) HyperpodNodeClass（请把 InstanceGroup 名称通过环境变量传入）
-export HP_INSTANCE_GROUP_1=<your-instance-group-1>
+export HP_INSTANCE_GROUP_1=worker-group-1
 export HP_INSTANCE_GROUP_2=<your-instance-group-2>  # 可选
 
 envsubst '${HP_INSTANCE_GROUP_1} ${HP_INSTANCE_GROUP_2}' \
@@ -520,14 +581,14 @@ kubectl get pod -l app=open-gallery -o yaml | grep serviceAccountName
 
 # 3. 检查 Pod Identity Association
 aws eks list-pod-identity-associations \
-    --cluster-name hp-eks-03 \
+    --cluster-name ${CLUSTER_NAME} \
     --namespace default \
     --service-account open-gallery-sa
 
 # 4. 如果 Association 不存在，重新运行设置脚本
 cd deploy
 ./scripts/setup-open-gallery-pod-identity.sh \
-    --cluster-name your-cluster-name \
+    --cluster-name ${CLUSTER_NAME} \
     --region us-west-2
 
 # 5. 重启 Pod 使配置生效
@@ -635,7 +696,7 @@ kubectl get pv comfyui-models-pv
 
 # 对于 SageMaker HyperPod，检查 add-on 状态
 aws eks describe-addon \
-    --cluster-name your-cluster-name \
+    --cluster-name ${CLUSTER_NAME} \
     --addon-name aws-mountpoint-s3-csi-driver \
     --region us-west-2
 
@@ -664,11 +725,11 @@ kubectl describe pvc comfyui-models-pvc
 ```bash
 # 检查 Pod Identity 关联
 aws eks list-pod-identity-associations \
-    --cluster-name hp-eks-03
+    --cluster-name ${CLUSTER_NAME}
 
 # 查看特定关联详情
 aws eks describe-pod-identity-association \
-    --cluster-name your-cluster-name \
+    --cluster-name ${CLUSTER_NAME} \
     --association-id ASSOCIATION_ID
 
 
@@ -731,7 +792,7 @@ Ingress 使用 AWS Load Balancer Controller 在 EC2 中创建真实的 ALB。若
 
 ```bash
 # 设置环境变量（根据实际情况修改）
-export CLUSTER_NAME=hp-eks-03
+export CLUSTER_NAME=${CLUSTER_NAME}
 export AWS_REGION=us-west-2
 export VPC_ID=vpc-0f42e65b0eb5be613
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
