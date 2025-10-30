@@ -7,7 +7,7 @@
 #   ./build-and-push.sh [OPTIONS]
 #
 # Options:
-#   --app <name>          Application to build: open-gallery, comfyui-s3, daemonset-s3-sync, all (default: all)
+#   --app <name>          Application to build: open-gallery, comfyui-s3, comfyui-queue-metrics, daemonset-s3-sync, all (default: all)
 #   --tag <tag>           Image tag (default: latest)
 #   --region <region>     AWS region (default: us-west-2)
 #   --help                Show this help message
@@ -34,17 +34,17 @@ print_error() {
 # Check if required tools are installed
 check_prerequisites() {
     print_info "Checking prerequisites..."
-    
+
     if ! command -v docker &> /dev/null; then
         print_error "Docker is not installed. Please install Docker first."
         exit 1
     fi
-    
+
     if ! command -v aws &> /dev/null; then
         print_error "AWS CLI is not installed. Please install AWS CLI first."
         exit 1
     fi
-    
+
     print_info "All prerequisites are met."
 }
 
@@ -81,9 +81,9 @@ parse_arguments() {
     done
 
     # Validate app name
-    if [[ ! "$APP_TO_BUILD" =~ ^(open-gallery|comfyui-s3|daemonset-s3-sync|all)$ ]]; then
+    if [[ ! "$APP_TO_BUILD" =~ ^(open-gallery|comfyui-s3|comfyui-queue-metrics|daemonset-s3-sync|all)$ ]]; then
         print_error "Invalid app name: $APP_TO_BUILD"
-        print_error "Valid options: open-gallery, comfyui-s3, daemonset-s3-sync, all"
+        print_error "Valid options: open-gallery, comfyui-s3, comfyui-queue-metrics, daemonset-s3-sync, all"
         exit 1
     fi
 }
@@ -128,10 +128,10 @@ create_ecr_repo() {
 # Authenticate Docker to ECR
 authenticate_docker() {
     print_info "Authenticating Docker to ECR..."
-    
+
     aws ecr get-login-password --region ${AWS_REGION} | \
         docker login --username AWS --password-stdin ${ECR_REGISTRY}
-    
+
     if [ $? -eq 0 ]; then
         print_info "Docker authentication successful."
     else
@@ -233,6 +233,10 @@ display_summary() {
         print_info "ComfyUI (S3): ${ECR_REGISTRY}/comfyui-s3:${IMAGE_TAG}"
     fi
 
+    if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "comfyui-queue-metrics" ]; then
+        print_info "ComfyUI Queue Metrics: ${ECR_REGISTRY}/comfyui-queue-metrics:${IMAGE_TAG}"
+    fi
+
     if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "daemonset-s3-sync" ]; then
         print_info "DaemonSet S3 Sync: ${ECR_REGISTRY}/daemonset-s3-sync:${IMAGE_TAG}"
     fi
@@ -253,7 +257,7 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --app <name>      Application to build (default: all)"
-    echo "                    Options: open-gallery, comfyui-s3, daemonset-s3-sync, all"
+    echo "                    Options: open-gallery, comfyui-s3, comfyui-queue-metrics, daemonset-s3-sync, all"
     echo "  --tag <tag>       Image tag (default: latest)"
     echo "  --region <region> AWS region (default: us-west-2)"
     echo "  --help            Show this help message"
@@ -262,6 +266,7 @@ show_usage() {
     echo "  $0                                    # Build all images"
     echo "  $0 --app open-gallery                 # Build only open-gallery"
     echo "  $0 --app comfyui-s3                   # Build ComfyUI S3 version"
+    echo "  $0 --app comfyui-queue-metrics        # Build ComfyUI queue metrics sidecar"
     echo "  $0 --app daemonset-s3-sync            # Build DaemonSet S3 sync image (s5cmd+boto3)"
     echo "  $0 --app comfyui-s3 --tag v1.0        # Build ComfyUI S3 with tag v1.0"
     echo ""
@@ -296,6 +301,14 @@ main() {
             "comfyui-s3" \
             "."
     fi
+
+    if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "comfyui-queue-metrics" ]; then
+        build_and_push_app "comfyui-queue-metrics" \
+            "deploy/comfyui-queue-metrics.dockerfile" \
+            "comfyui-queue-metrics" \
+            "."
+    fi
+
 
     if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "daemonset-s3-sync" ]; then
         build_and_push_app "daemonset-s3-sync" \

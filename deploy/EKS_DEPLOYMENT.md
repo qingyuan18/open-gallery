@@ -208,6 +208,8 @@ kubectl -n keda get deploy keda-operator
 ```bash
 # 使用当前环境中的 AWS_REGION 渲染后应用
 cd deploy/k8s-manifests
+kubectl apply -f comfyui-keda-triggerauth.yaml
+
 envsubst '${AWS_REGION}' < comfyui-keda-scaledobject.yaml | kubectl apply -f -
 
 # 查看 KEDA 状态
@@ -220,7 +222,7 @@ kubectl -n keda logs deploy/keda-operator --tail=100
 - `targetMetricValue: "1"` 表示目标“每个 Pod 平均排队数为 1”，超过触发扩容；可按业务调小以提早扩容（GPU 冷启动较慢）。
 - `maxReplicaCount: 10` 按需调整上限。
 - `cooldownPeriod / stabilizationWindowSeconds` 较大，避免频繁缩容造成抖动。
-- 本示例使用 `identityOwner: pod`，即通过 `comfyui-sa` 的 Pod Identity 调用 CloudWatch `GetMetricData`，无需给 KEDA Operator 额外授权。
+- 本示例使用 TriggerAuthentication + Pod Identity（provider: aws-eks），即通过 `comfyui-sa` 的 Pod Identity 调用 CloudWatch `GetMetricData`，无需给 KEDA Operator 额外授权，也无需为 KEDA 新建 ServiceAccount。
 
 ### ComfyUI 队列 API 参考
 - 端点：`GET /queue`

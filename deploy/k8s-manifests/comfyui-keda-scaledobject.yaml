@@ -36,5 +36,6 @@ spec:
       metricCollectionTime: "180"
       metricEndTimeOffset: "60"
       awsRegion: "${AWS_REGION}"
-      identityOwner: pod               # use comfyui-sa Pod Identity to read CloudWatch metrics
+    authenticationRef:
+      name: comfyui-cw-auth
 
