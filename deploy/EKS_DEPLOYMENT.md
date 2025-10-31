@@ -13,23 +13,6 @@
 - ✅ **AWS Load Balancer Controller** 已安装在集群中
 - ✅ **NVIDIA Device Plugin** 已安装 (用于 GPU 支持)
 
-### 验证集群
-
-```bash
-# 检查集群连接
-kubectl cluster-info
-
-# 检查 GPU 节点
-kubectl get nodes -o json | jq '.items[].status.capacity."nvidia.com/gpu"'
-
-# 检查 ALB Controller
-kubectl get deployment -n kube-system aws-load-balancer-controller
-```
-
----
-
-
-
 
 
 ## � 部署顺序小结
@@ -48,12 +31,12 @@ cd deploy
 
 # 1) 安装 S3 CSI Driver（用于挂载 S3 bucket）
 ./scripts/setup-s3-csi.sh \
-    --cluster-name <cluster-name> \
+    --cluster-name ${CLUSTER_NAME} \
     --bucket comfyui-models-bucket-687912291502 \
     --use-pod-identity
 
 ./scripts/setup-s3-csi.sh \
-    --cluster-name <cluster-name> \
+    --cluster-name ${CLUSTER_NAME} \
     --bucket open-gallery-files-bucket-687912291502 \
     --use-pod-identity
 
@@ -104,7 +87,7 @@ kubectl get nodes -L workload
     fi
     echo "S3_CSI_ROLE_ARN=$S3_CSI_ROLE_ARN"
 
-    # 先关联 default/comfyui-prewarm-sa 到该 Role（可复用同一 Role）
+    # 先关联 default/comfyui-prewarm-sa 到该 Role（复用同一Role）
     aws eks create-pod-identity-association \
         --cluster-name $CLUSTER_NAME \
         --namespace default \
@@ -124,8 +107,8 @@ kubectl apply -f k8s-manifests/s3-pv-pvc.yaml                     # ComfyUI 模�
 kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml     # Open Gallery 文件（读写）
 
 # 5) 构建与部署
-./scripts/build-and-push.sh --app comfyui-s3
-./scripts/build-and-push.sh --app open-gallery
+./scripts/build-and-push.sh --app comfyui-s3 --region ${AWS_REGION}
+./scripts/build-and-push.sh --app open-gallery --region ${AWS_REGION}
 ./scripts/deploy-to-eks.sh
 
 # 6) 获取 ALB 地址
@@ -134,7 +117,7 @@ kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingr
 
 ## KEDA + CloudWatch（无 Prometheus）按 ComfyUI 队列长度自动扩缩
 
-说明：本方案不改动应用代码，通过在 ComfyUI Pod 内增加一个 Sidecar 容器，定期从本地接口获取队列长度，并把指标写入 CloudWatch；KEDA 使用 CloudWatch Scaler 拉取该指标并驱动 HPA 扩缩。节点层扩容由 Karpenter/Cluster Autoscaler 处理。
+方案说明：不改动应用代码，通过在 ComfyUI Pod 内增加一个 Sidecar 容器，定期从本地接口获取队列长度，并把指标写入 CloudWatch；KEDA 使用 CloudWatch Scaler 拉取该指标并驱动 HPA 扩缩。节点层扩容由 Karpenter/Cluster Autoscaler 处理。
 
 - 队列来源（ComfyUI 最新接口）：`GET http://127.0.0.1:8188/queue`，响应中包含 `queue_pending` 与 `queue_running` 两个数组；扩缩基于 `len(queue_pending)`。
 - CloudWatch 指标约定：Namespace=`ComfyUI`，MetricName=`QueuePending`，Dimension=`Deployment=comfyui`。
@@ -149,7 +132,7 @@ kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingr
 ```bash
 # 在仓库根目录执行
 export CLUSTER_NAME=hp-eks
-export AWS_REGION=${AWS_REGION:-us-west-2}
+export AWS_REGION=${AWS_REGION:-us-east-1}
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export ECR=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
@@ -167,11 +150,11 @@ docker push $ECR/comfyui-queue-metrics:latest
 
 该镜像运行 `deploy/scripts/comfyui_queue_metrics.py`：定期请求 `http://127.0.0.1:8188/queue`，将 `len(queue_pending)` 写入 CloudWatch。
 
-### 步骤 2：为 comfyui-sa 配置 Pod Identity（授予 PutMetricData）
+### 步骤 2：为 comfyui-sa 配置 Pod Identity（授予 PutMetricData，如果上面基本部署步骤已经执行，则可以跳过）
 
 ```bash
 cd deploy
-./scripts/setup-comfyui-cloudwatch-pod-identity.sh \
+bash ./scripts/setup-comfyui-cloudwatch-pod-identity.sh \
   --cluster-name ${CLUSTER_NAME} \
   --region ${AWS_REGION}
 ```
@@ -182,14 +165,13 @@ cd deploy
 - 关联 `default/comfyui-sa` 与该 Role（EKS Pod Identity Association）
 
 
-### 步骤 2.1：为 KEDA 启用 IRSA（workload 模式）
+### 步骤 2.1：为 KEDA 启用 IRSA（operator 模式）
 
-KEDA 在 `identityOwner: workload` 模式下，会读取目标工作负载的 ServiceAccount（`comfyui-sa`）上的 IRSA 注解，通过 OIDC 以该 Role 身份访问 CloudWatch。
+KEDA 在 `identityOwner: keda` 模式下，使用 Operator 的 ServiceAccount（`keda-operator`）上的 IRSA 凭证访问 CloudWatch。
 
 1) 更新 `ComfyUICloudWatchRole` 的信任策略，增加 OIDC（保留原有 pods.eks.amazonaws.com 条目）：
 
 ```bash
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export OIDC_PROVIDER=$(aws eks describe-cluster \
   --name ${CLUSTER_NAME} \
   --region ${AWS_REGION} \
@@ -216,6 +198,17 @@ cat > /tmp/comfyui-irsa-trust.json <<EOF
 
         }
       }
+    },
+    {
+      "Effect": "Allow",
+      "Principal": {"Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"},
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "${OIDC_PROVIDER}:sub": "system:serviceaccount:keda:keda-operator",
+          "${OIDC_PROVIDER}:aud": "sts.amazonaws.com"
+        }
+      }
     }
   ]
 }
@@ -226,29 +219,24 @@ aws iam update-assume-role-policy \
   --policy-document file:///tmp/comfyui-irsa-trust.json
 ```
 
-2) 应用带 IRSA 注解的 ServiceAccount（使用 envsubst 注入账户 ID）：
+2) 给 keda-operator 的 ServiceAccount 添加 IRSA 注解并应用：
 
 ```bash
 cd deploy/k8s-manifests
-envsubst '${AWS_ACCOUNT_ID}' < comfyui-serviceaccount.yaml | kubectl apply -f -
+envsubst '${AWS_ACCOUNT_ID}' < keda-operator-serviceaccount-irsa.yaml | kubectl apply -f -
+kubectl -n keda rollout restart deploy/keda-operator
 ```
 
-> 注：ComfyUI Pod 仍通过 EKS Pod Identity Association 获取写入 CloudWatch 的权限；KEDA 通过 IRSA 临时代入同一 Role 来读取指标。
+> 注：ComfyUI Pod 仍通过 EKS Pod Identity Association 写入 CloudWatch；KEDA 通过 operator 的 IRSA 读取 CloudWatch（无需再读取工作负载 SA token）。
 
 ### 步骤 3：部署包含 Sidecar 的 ComfyUI Deployment
 
-已在 `k8s-manifests/comfyui-deployment.yaml` 中加入：
-- `serviceAccountName: comfyui-sa`
-- Sidecar 容器 `comfyui-cw-metrics`，默认每 10s 写一次 CloudWatch 指标
-
-使用项目脚本部署（会自动 envsubst 镜像地址）：
+使用项目脚本部署（重新部署comfyui，以便使keda的IRSA代入生效）：
 ```bash
 cd deploy
 ./scripts/build-and-push.sh --app comfyui-s3   # 若镜像已存在可跳过
 ./scripts/deploy-to-eks.sh
 ```
-
-注意：仓库已移除独立 HPA 清单，避免与 KEDA 生成的 HPA 冲突。
 
 ### 步骤 4：安装 KEDA（如未安装）
 
@@ -283,7 +271,7 @@ kubectl -n keda logs deploy/keda-operator --tail=100
 - `targetMetricValue: "1"` 表示目标“每个 Pod 平均排队数为 1”，超过触发扩容；可按业务调小以提早扩容（GPU 冷启动较慢）。
 - `maxReplicaCount: 10` 按需调整上限。
 - `cooldownPeriod / stabilizationWindowSeconds` 较大，避免频繁缩容造成抖动。
-- 本示例使用 TriggerAuthentication（provider: aws, identityOwner: workload）基于 IRSA 代入工作负载的 ServiceAccount（`comfyui-sa`）对应的 IAM Role 来读取 CloudWatch；无需给 KEDA Operator 额外授权，也无需为 KEDA 新建 ServiceAccount。
+- 本示例使用 TriggerAuthentication（provider: aws, identityOwner: keda），KEDA 使用 `keda-operator` 的 ServiceAccount IRSA 读取 CloudWatch；无需读取工作负载的 ServiceAccount 令牌。
 
 ### ComfyUI 队列 API 参考
 - 端点：`GET /queue`
@@ -498,15 +486,6 @@ kubectl rollout restart deployment/open-gallery || true
 - emptyDir 缓存是节点本地的临时空间，Pod 迁移到其他节点时缓存会重建；
 - 如需更大/持久/高 IOPS 缓存，可参考 Mountpoint CSI Driver 仓库的 docs/CACHING.md 中的 ephemeral（EBS/本地 NVMe）方案。
 
-
-
-**权限分离**
-
-| ServiceAccount | 用途 | 权限范围 |
-|---------------|------|---------|
-| `s3-csi-driver-sa` | S3 CSI Driver | 挂载 S3 bucket |
-| `open-gallery-sa` | Open Gallery App | DynamoDB + S3 + Bedrock |
-| `aws-load-balancer-controller` | ALB Controller | 创建/管理 ALB |
 
 
 ## �🔍 故障排除

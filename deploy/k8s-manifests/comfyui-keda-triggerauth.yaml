@@ -5,6 +5,6 @@ metadata:
   namespace: default
 spec:
   podIdentity:
-    provider: aws           # Use 'aws' for IRSA (IAM Roles for Service Accounts)
-    identityOwner: workload # Use the workload's ServiceAccount IRSA role
+    provider: aws           # Use 'aws' IRSA; operator mode uses keda-operator's SA
+    identityOwner: keda     # Use the KEDA operator's ServiceAccount IRSA role
 
