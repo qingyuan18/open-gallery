@@ -125,7 +125,6 @@ kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingr
 ### 先决条件
 - 集群侧已安装 CloudWatch（Container Insights 或可写入 CloudWatch 的权限环境）
 - 已有节点自动伸缩组件（Karpenter 或 Cluster Autoscaler）
-- 建议安装 KEDA（Operator + Metrics Adapter）：Helm 一条命令见下文
 
 ### 步骤 1：构建并推送 Sidecar 镜像（将队列写入 CloudWatch）
 
@@ -164,12 +163,34 @@ bash ./scripts/setup-comfyui-cloudwatch-pod-identity.sh \
 - 创建/更新 IAM Role（信任 pods.eks.amazonaws.com）
 - 关联 `default/comfyui-sa` 与该 Role（EKS Pod Identity Association）
 
+### 步骤 2.1：安装 KEDA（如未安装）
 
-### 步骤 2.1：为 KEDA 启用 IRSA（operator 模式）
+```bash
+helm repo add kedacore https://kedacore.github.io/charts
+helm repo update
+helm upgrade --install keda kedacore/keda -n keda --create-namespace
+# 验证
+kubectl -n keda get deploy keda-operator
+```
+
+> 可选（Helm 持久化）：将 KEDA 固定到 CPU 节点，避免调度到 GPU
+>
+> 通过 Helm 安装时为 KEDA 组件添加 nodeSelector（推荐）：
+>
+> ```bash
+> helm upgrade --install keda kedacore/keda -n keda --create-namespace \
+>   --set operator.nodeSelector.workload=cpu \
+>   --set admissionWebhooks.nodeSelector.workload=cpu \
+>   --set metricsServer.nodeSelector.workload=cpu
+> # 说明：若使用的 Chart 版本不包含 metricsServer，此项将被忽略（无副作用）
+> ```
+
+
+### 步骤 2.2：为 KEDA 启用 IRSA（operator 模式）
 
 KEDA 在 `identityOwner: keda` 模式下，使用 Operator 的 ServiceAccount（`keda-operator`）上的 IRSA 凭证访问 CloudWatch。
 
-1) 更新 `ComfyUICloudWatchRole` 的信任策略，增加 OIDC（保留原有 pods.eks.amazonaws.com 条目）：
+1) 更新 `ComfyUICloudWatchRole` 的信任策略，增加 keda operator（AssumeRoleWithWebIdentity）：
 
 ```bash
 export OIDC_PROVIDER=$(aws eks describe-cluster \
@@ -220,7 +241,6 @@ aws iam update-assume-role-policy \
 ```
 
 2) 给 keda-operator 的 ServiceAccount 添加 IRSA 注解并应用：
-
 ```bash
 cd deploy/k8s-manifests
 envsubst '${AWS_ACCOUNT_ID}' < keda-operator-serviceaccount-irsa.yaml | kubectl apply -f -
@@ -231,29 +251,17 @@ kubectl -n keda rollout restart deploy/keda-operator
 
 ### 步骤 3：部署包含 Sidecar 的 ComfyUI Deployment
 
-使用项目脚本部署（重新部署comfyui，以便使keda的IRSA代入生效）：
+使用项目脚本部署（重新部署comfyui，以便使comfyui的sa put metric 给keda operator）：
 ```bash
 cd deploy
 ./scripts/build-and-push.sh --app comfyui-s3   # 若镜像已存在可跳过
 ./scripts/deploy-to-eks.sh
 ```
 
-### 步骤 4：安装 KEDA（如未安装）
+
+### 步骤 4：应用 KEDA ScaledObject（CloudWatch Scaler）
 
 ```bash
-helm repo add kedacore https://kedacore.github.io/charts
-helm repo update
-helm upgrade --install keda kedacore/keda -n keda --create-namespace
-# 验证
-kubectl -n keda get deploy keda-operator
-```
-
-### 步骤 5：应用 KEDA ScaledObject（CloudWatch Scaler）
-
-`k8s-manifests/comfyui-keda-scaledobject.yaml` 已提供示例，使用 CloudWatch 指标驱动扩缩：
-
-```bash
-# 使用当前环境中的 AWS_REGION 渲染后应用
 cd deploy/k8s-manifests
 envsubst '${AWS_ACCOUNT_ID}' < comfyui-serviceaccount.yaml | kubectl apply -f -
 kubectl apply -f comfyui-keda-triggerauth.yaml
@@ -273,12 +281,52 @@ kubectl -n keda logs deploy/keda-operator --tail=100
 - `cooldownPeriod / stabilizationWindowSeconds` 较大，避免频繁缩容造成抖动。
 - 本示例使用 TriggerAuthentication（provider: aws, identityOwner: keda），KEDA 使用 `keda-operator` 的 ServiceAccount IRSA 读取 CloudWatch；无需读取工作负载的 ServiceAccount 令牌。
 
-### ComfyUI 队列 API 参考
+#### ComfyUI 队列 API 参考
 - 端点：`GET /queue`
 - 典型响应：`{"queue_running": [...], "queue_pending": [...]}`
 - 队列长度取值：`len(queue_pending)`
 
-### 常见问题排查（KEDA + CloudWatch）
+
+#### 监控 KEDA 扩缩容过程
+
+**实时监控 Pod 扩缩容：**
+```bash
+# 监控 ComfyUI Pod 副本数变化
+watch -n 2 'kubectl get pods -l app=comfyui -o wide'
+
+# 查看 KEDA ScaledObject 状态
+kubectl get scaledobject comfyui-cw-scaler -n default -w
+
+# 查看 KEDA 决策日志
+kubectl -n keda logs deploy/keda-operator --tail=50 -f | grep -i scale
+```
+
+**查看 CloudWatch 指标（CLI）：**
+```bash
+# 查看最近 5 分钟的 QueuePending 指标
+now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+start=$(date -u -d '-5 minutes' +%Y-%m-%dT%H:%M:%SZ)
+aws cloudwatch get-metric-statistics \
+  --namespace ComfyUI \
+  --metric-name QueuePending \
+  --dimensions Name=Deployment,Value=comfyui \
+  --start-time "$start" \
+  --end-time "$now" \
+  --period 60 \
+  --statistics Average Maximum \
+  --region ${AWS_REGION}
+
+# 实时监控指标（每 30 秒刷新）
+watch -n 5 'now=$(date -u +%Y-%m-%dT%H:%M:%SZ); start=$(date -u -d "-2 minutes" +%Y-%m-%dT%H:%M:%SZ); aws cloudwatch get-metric-statistics --namespace ComfyUI --metric-name QueuePending --dimensions Name=Deployment,Value=comfyui --start-time "$start" --end-time "$now" --period 60 --statistics Average --region ${AWS_REGION} --query "Datapoints | sort_by(@,&Timestamp)[-1].Average" --output text'
+```
+
+**查看扩缩容事件：**
+```bash
+# 查看 KEDA 相关事件
+kubectl get events --sort-by='.lastTimestamp' | grep -E 'ScaledObject|HorizontalPodAutoscaler'
+```
+
+#### 常见问题排查（KEDA + CloudWatch）
 - CloudWatch 未见到指标：检查 Sidecar 日志 `kubectl logs -l app=comfyui -c comfyui-cw-metrics`；确认 Pod Identity 关联成功，Region 环境变量已注入。
 - KEDA 不扩容：`kubectl describe scaledobject` 查看触发器状态；同时查看 `keda-operator` 日志是否能正常 `GetMetricData`。
 - 扩容但 Pending：说明节点不足，应由 Karpenter/Cluster Autoscaler 扩节点；请检查 Karpenter Provisioner/NodePool 以及 GPU 机型可用性。
@@ -298,7 +346,7 @@ kubectl -n keda logs deploy/keda-operator --tail=100
 
 ### 路径 A：普通 EKS（EC2 Provider）
 
-### 先决条件
+#### 先决条件
 - Karpenter 已安装且 CRD 就绪（v1 API）：
   ```bash
   kubectl get crd ec2nodeclasses.karpenter.k8s.aws nodepools.karpenter.sh
@@ -306,6 +354,27 @@ kubectl -n keda logs deploy/keda-operator --tail=100
 - 网络：准备好用于工作节点的子网 ID（建议至少 2 个私有子网）与安全组 ID（无需 discovery 标签）。
 - IAM：存在 `KarpenterNodeRole-<CLUSTER_NAME>`（或自管的 InstanceProfile）。
 
+#### 应用最小 GPU NodeClass/NodePool
+```bash
+export CLUSTER_NAME=<your-eks-cluster>
+# Required: set networking and DLAMI AMI for SageMaker HyperPod nodes
+export SUBNET_ID_1=subnet-xxxxxxxx
+export SUBNET_ID_2=subnet-yyyyyyyy
+export SG_ID_1=sg-aaaaaaaa
+export SG_ID_2=sg-bbbbbbbb
+# DLAMI recommended base OS: AL2023; EC2NodeClass pins amiFamily: AL2023
+export AMI_ID=ami-0abcde1234567890f  # DLAMI AMI ID
+
+cd deploy/k8s-manifests
+# 1) EC2NodeClass（按 ID 选择子网/安全组）
+envsubst '${CLUSTER_NAME} ${SUBNET_ID_1} ${SUBNET_ID_2} ${SG_ID_1} ${SG_ID_2} ${AMI_ID}' < karpenter-ec2nodeclass-gpu.yaml | kubectl apply -f -
+# 2) NodePool（无占位变量，直接应用）
+kubectl apply -f karpenter-nodepool-gpu.yaml
+```
+
+说明与默认值：
+- NodePool 仅约束 `instance-family ∈ {g5,g6e}`、`arch=amd64`、`os=linux`、`capacity-type=on-demand`。如需节省成本，可将 capacity-type 改为 `spot`（留意突发中断）。
+- 扰动策略：`consolidationPolicy: WhenEmptyOrUnderutilized`，`consolidateAfter: 2m`，`budgets: 10%`，避免与 KEDA 缩容造成抖动。
 
 ### 路径 B：HyperPod EKS（托管 Karpenter，文件 apply）
 
@@ -383,7 +452,7 @@ aws sagemaker describe-cluster \
 export HP_INSTANCE_GROUP_1=worker-group-1
 export HP_INSTANCE_GROUP_2=<your-instance-group-2>  # 可选
 
-envsubst '${HP_INSTANCE_GROUP_1} ${HP_INSTANCE_GROUP_2}' \
+envsubst '${HP_INSTANCE_GROUP_1}' \
   < deploy/k8s-manifests/karpenter-hyperpod-nodeclass-gpu.yaml | kubectl apply -f -
 
 # 4.2) NodePool（引用上述 NodeClass；给新节点打上 workload=gpu 标签）
@@ -408,38 +477,6 @@ kubectl -n karpenter logs deploy/karpenter --tail=200
 
 > 备注：HyperPod 托管 Karpenter 无需在 EKS 内安装 Karpenter Helm Chart/Add-on；若你的 EKS 曾安装“自管版 Karpenter”，请确保资源/CRD 不冲突（应使用 v1 的 NodePool/NodeClaim 族）。
 
-### 应用最小 GPU NodeClass/NodePool
-```bash
-export CLUSTER_NAME=<your-eks-cluster>
-# Required: set networking and DLAMI AMI for SageMaker HyperPod nodes
-export SUBNET_ID_1=subnet-xxxxxxxx
-export SUBNET_ID_2=subnet-yyyyyyyy
-export SG_ID_1=sg-aaaaaaaa
-export SG_ID_2=sg-bbbbbbbb
-# DLAMI recommended base OS: AL2023; EC2NodeClass pins amiFamily: AL2023
-export AMI_ID=ami-0abcde1234567890f  # DLAMI AMI ID
-
-cd deploy/k8s-manifests
-# 1) EC2NodeClass（按 ID 选择子网/安全组）
-envsubst '${CLUSTER_NAME} ${SUBNET_ID_1} ${SUBNET_ID_2} ${SG_ID_1} ${SG_ID_2} ${AMI_ID}' < karpenter-ec2nodeclass-gpu.yaml | kubectl apply -f -
-# 2) NodePool（无占位变量，直接应用）
-kubectl apply -f karpenter-nodepool-gpu.yaml
-```
-
-说明与默认值：
-- NodePool 仅约束 `instance-family ∈ {g5,g6e}`、`arch=amd64`、`os=linux`、`capacity-type=on-demand`。如需节省成本，可将 capacity-type 改为 `spot`（留意突发中断）。
-- 扰动策略：`consolidationPolicy: WhenEmptyOrUnderutilized`，`consolidateAfter: 2m`，`budgets: 10%`，避免与 KEDA 缩容造成抖动。
-
-### 验证
-```bash
-# 1) 触发扩容（例如把队列打满或临时手动扩副本以产生 Pending）
-kubectl scale deploy/comfyui --replicas=3
-# 2) 观察 Karpenter 供给节点与调度
-kubectl get node -w -L workload,karpenter.sh/nodepool
-# 3) 观察 Karpenter 事件/日志（可选）
-kubectl -n karpenter logs deploy/karpenter --tail=200
-```
-
 ### 可选：与可用性保护搭配
 - 建议为 ComfyUI 增加 PDB（示例：3 副本时至少保 2）：
   ```yaml
@@ -454,6 +491,57 @@ kubectl -n karpenter logs deploy/karpenter --tail=200
         app: comfyui
   ```
 - 若后续希望隔离 GPU 节点，给 NodePool 加 taint `nvidia.com/gpu=true:NoSchedule`，同时在 Deployment 增加相应 tolerations。
+
+
+### 验证
+```bash
+# 1) 触发扩容（例如把队列打满或临时手动扩副本以产生 Pending）
+kubectl scale deploy/comfyui --replicas=3
+# 2) 观察 Karpenter 供给节点与调度
+kubectl get node -w -L workload,karpenter.sh/nodepool
+# 3) 观察 Karpenter 事件/日志（可选）
+kubectl -n karpenter logs deploy/karpenter --tail=200
+```
+
+### 监控 Karpenter 扩缩容过程
+
+**实时监控节点扩缩容：**
+```bash
+# 监控 GPU 节点变化
+watch -n 5 'kubectl get nodes -l workload=gpu --show-labels'
+
+# 监控所有节点及 Karpenter 标签
+watch -n 5 'kubectl get nodes -L workload,karpenter.sh/nodepool,node.kubernetes.io/instance-type'
+
+# 查看 Karpenter 控制器日志（仅适用于自管版 Karpenter）
+kubectl -n karpenter logs -l app.kubernetes.io/name=karpenter --tail=50 -f
+```
+
+**查看节点供给事件：**
+```bash
+# 查看 Karpenter 相关事件
+kubectl get events --sort-by='.lastTimestamp' | grep -E 'NodeClaim|Node|Karpenter'
+
+# 查看 NodeClaim 资源（Karpenter 创建的节点请求）
+kubectl get nodeclaims -o wide
+
+# 查看 NodePool 状态
+kubectl get nodepools -o wide
+```
+
+## **完整扩缩容流程监控：**
+```bash
+# 在一个终端监控 Pod
+watch -n 2 'kubectl get pods -l app=comfyui -o wide'
+
+# 在另一个终端监控 Node
+watch -n 5 'kubectl get nodes -l workload=gpu -o wide'
+
+# HyperPod 伸缩状态
+aws sagemaker describe-cluster --cluster-name $HP_CLUSTER_NAME --query 'AutoScaling'
+```
+
+
 
 
 ## 启用 S3 CSI 缓存（emptyDir + metadata-ttl 20s）

@@ -14,5 +14,5 @@ spec:
   # Recommend setting those InstanceGroups' desired count to 0 and let Karpenter provision on demand
   instanceGroups:
   - ${HP_INSTANCE_GROUP_1}
-  - ${HP_INSTANCE_GROUP_2}
+  #- ${HP_INSTANCE_GROUP_2}
 
