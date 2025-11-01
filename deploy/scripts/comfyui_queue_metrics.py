@@ -53,7 +53,7 @@ def put_metric(name: str, value: float):
                 "Timestamp": datetime.now(timezone.utc),
                 "Value": float(value),
                 "Unit": "Count",
-                "StorageResolution": 60,
+                "StorageResolution": 1,
             }]
         )
     except Exception as e:

@@ -493,7 +493,7 @@ kubectl -n karpenter logs deploy/karpenter --tail=200
 - 若后续希望隔离 GPU 节点，给 NodePool 加 taint `nvidia.com/gpu=true:NoSchedule`，同时在 Deployment 增加相应 tolerations。
 
 
-### 验证
+### 验证 监控 Karpenter 扩缩容过程
 ```bash
 # 1) 触发扩容（例如把队列打满或临时手动扩副本以产生 Pending）
 kubectl scale deploy/comfyui --replicas=3
@@ -502,8 +502,6 @@ kubectl get node -w -L workload,karpenter.sh/nodepool
 # 3) 观察 Karpenter 事件/日志（可选）
 kubectl -n karpenter logs deploy/karpenter --tail=200
 ```
-
-### 监控 Karpenter 扩缩容过程
 
 **实时监控节点扩缩容：**
 ```bash
@@ -859,9 +857,9 @@ Ingress 使用 AWS Load Balancer Controller 在 EC2 中创建真实的 ALB。若
 
 ```bash
 # 设置环境变量（根据实际情况修改）
-export CLUSTER_NAME=${CLUSTER_NAME}
-export AWS_REGION=us-west-2
-export VPC_ID=vpc-0f42e65b0eb5be613
+export CLUSTER_NAME=hp-eks
+export AWS_REGION=us-east-1
+export VPC_ID=vpc-093a5a42b8a9299c8
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # ========== 步骤 1: 添加 Helm 仓库 ==========
@@ -913,6 +911,8 @@ aws iam attach-role-policy \
 aws iam get-role --role-name $ROLE_NAME
 
 # ========== 步骤 4: 使用 Helm 安装 ALB Controller ==========
+helm uninstall aws-load-balancer-controller -n kube-system
+
 helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
   --set clusterName=$CLUSTER_NAME \

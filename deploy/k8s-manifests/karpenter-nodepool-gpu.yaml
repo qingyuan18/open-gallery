@@ -35,11 +35,11 @@ spec:
           operator: In
           values: ["on-demand"]
   disruption:
-    # Consider empty or underutilized nodes for consolidation (cost reduction)
-    consolidationPolicy: WhenEmptyOrUnderutilized
+    # Only consolidate empty nodes to avoid disrupting in-use GPU nodes
+    consolidationPolicy: WhenEmpty
     # Wait a bit after pods are added/removed to avoid churn with KEDA scale-down
     consolidateAfter: 2m
-    # Limit parallel voluntary disruptions
+    # Limit voluntary disruptions to one node at a time to avoid multi-node replacement
     budgets:
-    - nodes: "10%"
+    - nodes: "1"
 
