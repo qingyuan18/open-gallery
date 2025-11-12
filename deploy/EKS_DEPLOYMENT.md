@@ -179,6 +179,10 @@ kubectl describe pod <pod-name>
 # 查看 Pod 日志
 kubectl logs <pod-name>
 
+# comfyui Pod检查
+POD_NAME=$(kubectl get pods  -l app=comfyui -o jsonpath='{.items[0].metadata.name}') 
+kubectl port-forward  $POD_NAME 8188:8188
+
 # 查看集群事件
 kubectl get events --sort-by='.lastTimestamp'
 
