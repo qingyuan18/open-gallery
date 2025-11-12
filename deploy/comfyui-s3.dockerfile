@@ -107,6 +107,18 @@ RUN git clone https://github.com/yolain/ComfyUI-Easy-Use.git /opt/program/custom
 # Amazon Bedrock LLM Node
 RUN git clone https://github.com/qingyuan18/comfyui-llm-node-for-amazon-bedrock.git /opt/program/custom_nodes/comfyui-llm-node-for-amazon-bedrock
 
+
+# flux & wan trainer node
+RUN git clone https://github.com/jaimitoes/ComfyUI_Wan2_1_lora_trainer.git /opt/program/customer_nodes/ComfyUI_Wan2_1_lora_trainer
+RUN git clone https://github.com/kijai/ComfyUI-FluxTrainer.git /opt/program/customer_nodes/ComfyUI-FluxTrainer
+RUN git clone https://github.com/aidenli/ComfyUI_NYJY.git /opt/program/customer_nodes/ComfyUI_NYJY
+RUN git clone https://github.com/kijai/ComfyUI-Florence2.git /opt/program/customer_nodes/ComfyUI-Florence2
+RUN git clone https://github.com/No-22-Github/ComfyUI_SaveImageCustom.git /opt/program/customer_nodes/ComfyUI_SaveImageCustom
+RUN git clone https://github.com/pythongosssss/ComfyUI-WD14-Tagger.git /opt/program/customer_nodes/ComfyUI-WD14-Tagger
+RUN git clone https://github.com/alexgenovese/ComfyUI_HF_Servelress_Inference.git /opt/program/customer_nodes/ComfyUI_HF_Servelress_Inference
+RUN git clone https://github.com/cubiq/ComfyUI_essentials.git /opt/program/customer_nodes/ComfyUI_essentials
+# 
+
 ###############################################################################
 # INSTALL ADDITIONAL DEPENDENCIES
 ###############################################################################

@@ -22,6 +22,9 @@
 ```bash
 export CLUSTER_NAME=hp-eks
 export AWS_REGION=${AWS_REGION:-us-east-1}
+
+export CLUSTER_NAME=hp-eks-03
+export AWS_REGION=us-west-2
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 cd deploy
@@ -109,7 +112,7 @@ kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml     # Open Gallery
 # 5) 构建与部署
 ./scripts/build-and-push.sh --app comfyui-s3 --region ${AWS_REGION}
 ./scripts/build-and-push.sh --app open-gallery --region ${AWS_REGION}
-./scripts/deploy-to-eks.sh
+./scripts/deploy-to-eks.sh --region ${AWS_REGION}
 
 # 6) 获取 ALB 地址
 kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' && echo
@@ -332,7 +335,7 @@ kubectl get events --sort-by='.lastTimestamp' | grep -E 'ScaledObject|Horizontal
 - 扩容但 Pending：说明节点不足，应由 Karpenter/Cluster Autoscaler 扩节点；请检查 Karpenter Provisioner/NodePool 以及 GPU 机型可用性。
 
 
-## Karpenter GPU NodePool 最小配置（与 KEDA 协同）
+## Karpenter GPU NodePool 与 KEDA 协同
 
 说明：当 KEDA/HPA 将 ComfyUI 副本扩到现有节点无法容纳时，Karpenter 会基于 Pending/Unschedulable Pod 的资源与调度约束供给新的 GPU 节点；当副本缩减后，Karpenter 会按 WhenEmptyOrUnderutilized 合并与回收空/低利用节点，遵守 PDB 与扰动预算。
 
@@ -435,6 +438,12 @@ aws iam put-role-policy \
 
 3) 在现有 HyperPod EKS 集群上启用 Karpenter（UpdateCluster）
 ```bash
+# 幂等准备：先关闭自动伸缩（如已启用则无副作用）
+aws sagemaker update-cluster \
+  --cluster-name $HP_CLUSTER_NAME \
+  --auto-scaling Mode=Disable
+
+# 启用 Karpenter 自动伸缩
 aws sagemaker update-cluster \
   --cluster-name $HP_CLUSTER_NAME \
   --auto-scaling Mode=Enable,AutoScalerType=Karpenter \
