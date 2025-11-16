@@ -125,6 +125,8 @@ RUN git clone https://github.com/alexgenovese/ComfyUI_HF_Servelress_Inference.gi
 RUN git clone https://github.com/cubiq/ComfyUI_essentials.git /opt/program/custom_nodes/ComfyUI_essentials && \
     cd /opt/program/custom_nodes/ComfyUI_essentials && \
     pip install -r requirements.txt
+
+
 # 
 
 ###############################################################################
@@ -147,6 +149,17 @@ RUN pip install "pydantic>=2.7,<3" "typing_extensions>=4.12.2"
 #RUN pip install -U --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 
+
+# legacy flash attn lib
+# Install ninja for faster compilation
+RUN pip install ninja
+
+# Install flash-attention with verbose output
+RUN pip uninstall -y flash_attn
+RUN git clone -b v2.0.1 https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention && \
+    cd /tmp/flash-attention && \
+    MAX_JOBS=4 python setup.py install --verbose && \
+    cd / && rm -rf /tmp/flash-attention
 
 #### Install SageAttention (optional performance optimization)
 # Use non-editable install to avoid pip 25.0 deprecation warning

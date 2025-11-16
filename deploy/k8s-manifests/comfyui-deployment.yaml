@@ -83,8 +83,6 @@ spec:
         # Mount NVMe models via hostPath
         - name: nvme-host
           mountPath: /opt/program/models
-          readOnly: true
-
         # Environment variables
         env:
         - name: NVIDIA_VISIBLE_DEVICES
