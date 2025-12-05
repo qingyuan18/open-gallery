@@ -42,7 +42,7 @@ def create_default_model():
     if BedrockModel:
         try:
             return BedrockModel(
-                model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
                 region_name="us-west-2"
             )
         except Exception as e:
