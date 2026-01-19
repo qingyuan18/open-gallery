@@ -131,9 +131,11 @@ class ComfyUIGenerator(ImageGenerator):
             if not self.flux_comfy_workflow:
                 raise Exception('Flux workflow json not found')
             workflow = copy.deepcopy(self.flux_comfy_workflow)
-            workflow['6']['inputs']['text'] = prompt
+            #workflow['6']['inputs']['text'] = prompt
+            workflow['16']['inputs']['text'] = prompt
             seed_val = random.randint(0, 99999999998)
-            workflow['31']['inputs']['seed'] = seed_val
+            #workflow['31']['inputs']['seed'] = seed_val
+            workflow['4']['inputs']['seed'] = seed_val
             print(f"🔧 Workflow params (flux): aspect_ratio={aspect_ratio}, seed={seed_val}, text_preview={prompt[:80]!r}, ctx_keys={list(ctx.keys())}")
         else:
             print(f"🔍 DEBUG: Executing workflow file: basic_comfy_t2i_workflow.json")

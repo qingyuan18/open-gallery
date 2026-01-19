@@ -127,13 +127,10 @@ Consider what specialists might be needed for each step and provide actionable g
         return f"❌ Planning Error: {str(e)}"
 
 
-# image_designer_agent 已移除 - 主Agent直接使用generate_image_with_context
-
-
 def get_specialized_agents():
     """返回所有专门化agent工具的列表"""
     return [
         planner_agent,
-        # image_designer_agent 已移除 - 主Agent直接使用generate_image_with_context
-        # coordinator_agent 已移除 - 主Agent直接承担协调职责
+        # image_designer_agent
+        # coordinator_agent
     ]

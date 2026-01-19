@@ -238,6 +238,10 @@ define_models() {
     S3_PATHS+=("models/text_encoders/t5xxl_fp8_e4m3fn.safetensors")
 
     # CLIP Models
+    MODEL_URLS+=("https://modelscope.cn/models/VerStella/z_image_turbo_comfyui/resolve/master/split_files/text_encoders/qwen_3_4b.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/clip/qwen_3_4b.safetensors")
+    S3_PATHS+=("models/clip/qwen_3_4b.safetensors")
+
     MODEL_URLS+=("https://huggingface.co/openai/clip-vit-large-patch14/resolve/main/model.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/clip/clip_l.safetensors")
     S3_PATHS+=("models/clip/clip_l.safetensors")
@@ -249,6 +253,11 @@ define_models() {
     
 
     # Diffusion Models
+    MODEL_URLS+=("https://modelscope.cn/models/VerStella/z_image_turbo_comfyui/resolve/master/split_files/diffusion_models/z_image_turbo_bf16.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/z_image_turbo_bf16.safetensors")
+    S3_PATHS+=("models/diffusion_models/z_image_turbo_bf16.safetensors")
+
+
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors")
     S3_PATHS+=("models/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors")
@@ -275,6 +284,10 @@ define_models() {
     S3_PATHS+=("models/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors")
 
     # VAE Models
+    MODEL_URLS+=("https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/resolve/main/vae/diffusion_pytorch_model.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/vae/z-image-vae.safetensors")
+    S3_PATHS+=("models/vae/z-image-vae.safetensors")
+
     MODEL_URLS+=("https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/vae/Wan2_1_VAE_bf16.safetensors")
     S3_PATHS+=("models/vae/Wan2_1_VAE_bf16.safetensors")
