@@ -17,8 +17,8 @@
   "86": {
     "inputs": {
       "steps": 20,
-      "width": 1080,
-      "height": 1920
+      "width": 1560,
+      "height": 2048
     },
     "class_type": "Flux2Scheduler",
     "_meta": {"title": "Flux2Scheduler"}
@@ -54,8 +54,8 @@
   },
   "90": {
     "inputs": {
-      "width": 1080,
-      "height": 1920,
+      "width": 1560,
+      "height": 2048,
       "batch_size": 1
     },
     "class_type": "EmptyFlux2LatentImage",
@@ -78,7 +78,7 @@
   },
   "95": {
     "inputs": {
-      "unet_name": "flux-2-klein-9b-fp8.safetensors",
+      "unet_name": "flux-2-klein-4b.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
@@ -86,7 +86,7 @@
   },
   "96": {
     "inputs": {
-      "clip_name": "qwen_3_8b_fp8mixed.safetensors",
+      "clip_name": "qwen_3_4b.safetensors",
       "type": "flux2",
       "device": "default"
     },
@@ -107,5 +107,14 @@
     },
     "class_type": "CLIPTextEncode",
     "_meta": {"title": "CLIP文本编码（正向）"}
+  },
+  "99": {
+    "inputs": {
+      "purge_cache": true,
+      "purge_models": true,
+      "anything": ["89", 0]
+    },
+    "class_type": "LayerUtility: PurgeVRAM V2",
+    "_meta": {"title": "清除VRAM"}
   }
 }

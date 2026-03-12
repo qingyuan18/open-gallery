@@ -13,7 +13,7 @@
   },
   "200": {
     "inputs": {
-      "value": 1024
+      "value": 800
     },
     "class_type": "JWInteger",
     "_meta": {
@@ -22,7 +22,7 @@
   },
   "201": {
     "inputs": {
-      "value": 720
+      "value": 800
     },
     "class_type": "JWInteger",
     "_meta": {

@@ -155,15 +155,17 @@ class WorkflowExecution:
                 })
                 raise Exception(message)
 
+    async def _watch_ws_messages(self):
+        async for message in self.ws:
+            if isinstance(message, str):
+                message = json.loads(message)
+                if not await self.on_message(message):
+                    break
+
     async def watch_execution(self):
         try:
             # Add timeout to prevent hanging indefinitely
-            async with asyncio.timeout(self.timeout):
-                async for message in self.ws:
-                    if isinstance(message, str):
-                        message = json.loads(message)
-                        if not await self.on_message(message):
-                            break
+            await asyncio.wait_for(self._watch_ws_messages(), timeout=self.timeout)
         except asyncio.TimeoutError:
             error_msg = f"Workflow execution timed out after {self.timeout} seconds"
             print(f"❌ {error_msg}")
