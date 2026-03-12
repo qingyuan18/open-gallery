@@ -1,0 +1,111 @@
+{
+  "9": {
+    "inputs": {
+      "images": ["89", 0],
+      "filename_prefix": "Flux2-Klein"
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "保存图像"}
+  },
+  "85": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {"title": "K采样器选择"}
+  },
+  "86": {
+    "inputs": {
+      "steps": 20,
+      "width": 1080,
+      "height": 1920
+    },
+    "class_type": "Flux2Scheduler",
+    "_meta": {"title": "Flux2Scheduler"}
+  },
+  "87": {
+    "inputs": {
+      "cfg": 5,
+      "model": ["95", 0],
+      "positive": ["98", 0],
+      "negative": ["91", 0]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {"title": "CFG引导器"}
+  },
+  "88": {
+    "inputs": {
+      "noise": ["94", 0],
+      "guider": ["87", 0],
+      "sampler": ["85", 0],
+      "sigmas": ["86", 0],
+      "latent_image": ["90", 0]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {"title": "自定义采样器（高级）"}
+  },
+  "89": {
+    "inputs": {
+      "samples": ["88", 0],
+      "vae": ["97", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE解码"}
+  },
+  "90": {
+    "inputs": {
+      "width": 1080,
+      "height": 1920,
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {"title": "空Flux2潜空间图像"}
+  },
+  "91": {
+    "inputs": {
+      "clip": ["96", 0],
+      "text": "字幕，中文字幕，blurry, out of focus, overexposed, underexposed, low contrast, washed out colors, excessive noise, grainy texture, poor lighting, flickering, motion blur, distorted proportions, unnatural skin tones, deformed facial features, asymmetrical face, missing facial features, extra limbs, disfigured hands, wrong hand count, artifacts around text, unreadable text on shirt or hat, incorrect lettering on cap (\u201cPNTR\u201d), incorrect t-shirt slogan (\u201cJUST DO IT\u201d), missing microphone, misplaced microphone, inconsistent perspective, camera shake, incorrect depth of field, background too sharp, background clutter, distracting reflections, harsh shadows, inconsistent lighting direction, color banding, cartoonish rendering, 3D CGI look, unrealistic materials, uncanny valley effect, incorrect ethnicity, wrong gender, exaggerated expressions, smiling, laughing, exaggerated sadness, wrong gaze direction, eyes looking at camera, mismatched lip sync, silent or muted audio, distorted voice, robotic voice, echo, background noise, off-sync audio, missing sniff sounds, incorrect dialogue, added dialogue, repetitive speech, jittery movement, awkward pauses, incorrect timing, unnatural transitions, inconsistent framing, tilted camera, missing door or shelves, missing shallow depth of field, flat lighting, inconsistent tone, cinematic oversaturation, stylized filters, or AI artifacts."
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "CLIP文本编码（反向）"}
+  },
+  "94": {
+    "inputs": {
+      "noise_seed": 1021073073817023
+    },
+    "class_type": "RandomNoise",
+    "_meta": {"title": "随机噪波"}
+  },
+  "95": {
+    "inputs": {
+      "unet_name": "flux-2-klein-9b-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {"title": "UNet加载器"}
+  },
+  "96": {
+    "inputs": {
+      "clip_name": "qwen_3_8b_fp8mixed.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "加载CLIP"}
+  },
+  "97": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {"title": "加载VAE"}
+  },
+  "98": {
+    "inputs": {
+      "clip": ["96", 0],
+      "text": ""
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "CLIP文本编码（正向）"}
+  }
+}

@@ -41,12 +41,15 @@ class ComfyUIGenerator(ImageGenerator):
             'flux_kontext_multiple_workflow.json')
         qwen_image_edit_workflow = get_asset_path(
             'qwen_image_edit_workflow.json')
+        flux2_klein_workflow = get_asset_path(
+            'flux2_klein_workflow.json')
 
         self.flux_comfy_workflow = None
         self.basic_comfy_t2i_workflow = None
         self.flux_kontext_workflow = None
         self.flux_kontext_multiple_workflow = None
         self.qwen_image_edit_workflow = None
+        self.flux2_klein_workflow = None
 
         try:
             print(f"🔍 DEBUG: Loading ComfyUI workflow files...")
@@ -72,6 +75,14 @@ class ComfyUIGenerator(ImageGenerator):
             except FileNotFoundError:
                 print("⚠️ qwen_image_edit_workflow.json not found, qwen multi-image edit features will be limited")
                 self.qwen_image_edit_workflow = None
+            # Load Flux2 Klein workflow (kleiv t2i)
+            try:
+                self.flux2_klein_workflow = json.load(
+                    open(flux2_klein_workflow, 'r'))
+                print("✅ Loaded flux2_klein_workflow")
+            except FileNotFoundError:
+                print("⚠️ flux2_klein_workflow.json not found, kleiv t2i will be unavailable")
+                self.flux2_klein_workflow = None
         except Exception as e:
             traceback.print_exc()
 
@@ -125,18 +136,25 @@ class ComfyUIGenerator(ImageGenerator):
                     raise Exception('Flux kontext workflow json not found')
                 return await self._run_flux_kontext_workflow(prompt, input_image, host, port, ctx)
 
-        # Handle other flux models
+        # Handle other flux models - use Flux2 Klein (kleiv) by default, fallback to z-image
         elif 'flux' in model:
-            print(f"🔍 DEBUG: Executing workflow file: flux_comfy_workflow.json")
-            if not self.flux_comfy_workflow:
-                raise Exception('Flux workflow json not found')
-            workflow = copy.deepcopy(self.flux_comfy_workflow)
-            #workflow['6']['inputs']['text'] = prompt
-            workflow['16']['inputs']['text'] = prompt
-            seed_val = random.randint(0, 99999999998)
-            #workflow['31']['inputs']['seed'] = seed_val
-            workflow['4']['inputs']['seed'] = seed_val
-            print(f"🔧 Workflow params (flux): aspect_ratio={aspect_ratio}, seed={seed_val}, text_preview={prompt[:80]!r}, ctx_keys={list(ctx.keys())}")
+            if self.flux2_klein_workflow:
+                print(f"🔍 DEBUG: Executing workflow file: flux2_klein_workflow.json (kleiv)")
+                workflow = copy.deepcopy(self.flux2_klein_workflow)
+                workflow['98']['inputs']['text'] = prompt
+                seed_val = random.randint(0, 99999999998)
+                workflow['94']['inputs']['noise_seed'] = seed_val
+                print(f"🔧 Workflow params (kleiv): aspect_ratio={aspect_ratio}, seed={seed_val}, text_preview={prompt[:80]!r}, ctx_keys={list(ctx.keys())}")
+            else:
+                # Fallback to old z-image workflow
+                print(f"🔍 DEBUG: Executing workflow file: flux_comfy_workflow.json (z-image fallback)")
+                if not self.flux_comfy_workflow:
+                    raise Exception('Flux workflow json not found')
+                workflow = copy.deepcopy(self.flux_comfy_workflow)
+                workflow['16']['inputs']['text'] = prompt
+                seed_val = random.randint(0, 99999999998)
+                workflow['4']['inputs']['seed'] = seed_val
+                print(f"🔧 Workflow params (flux z-image): aspect_ratio={aspect_ratio}, seed={seed_val}, text_preview={prompt[:80]!r}, ctx_keys={list(ctx.keys())}")
         else:
             print(f"🔍 DEBUG: Executing workflow file: basic_comfy_t2i_workflow.json")
             if not self.basic_comfy_t2i_workflow:
