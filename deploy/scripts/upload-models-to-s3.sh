@@ -156,6 +156,7 @@ setup_temp_directory() {
     mkdir -p "$TEMP_DIR/models/clip_vision"
     mkdir -p "$TEMP_DIR/models/loras"
     mkdir -p "$TEMP_DIR/models/unet"
+    mkdir -p "$TEMP_DIR/models/latent_upscale_models"
     
     print_info "Temporary directory structure created at: $TEMP_DIR"
 }
@@ -332,6 +333,34 @@ define_models() {
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors")
     S3_PATHS+=("models/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors")
+
+    MODEL_URLS+=("https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-lora-384.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/loras/ltx-2-19b-distilled-lora-384.safetensors")
+    S3_PATHS+=("models/loras/ltx2-lora-242-bf16.safetensors")
+
+    # LTX2 / Klein Diffusion Models
+    MODEL_URLS+=("https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-fp8.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/ltx-2-19b-distilled-fp8.safetensors")
+    S3_PATHS+=("models/diffusion_models/ltx-2-19b-distilled-fp8.safetensors")
+
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-4b/resolve/main/split_files/diffusion_models/flux-2-klein-4b.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/flux-2-klein-4b.safetensors")
+    S3_PATHS+=("models/diffusion_models/flux-2-klein-4b.safetensors")
+
+    # LTX2 Text Encoder
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/text_encoders/gemma_3_12B_it.safetensors")
+    S3_PATHS+=("models/text_encoders/gemma_3_12B_it.safetensors")
+
+    # LTX2 Latent Upscale Model
+    MODEL_URLS+=("https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-spatial-upscaler-x2-1.0.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/latent_upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors")
+    S3_PATHS+=("models/latent_upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors")
+
+    # Klein VAE
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-4b/resolve/main/split_files/vae/flux2-vae.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/vae/flux2-vae.safetensors")
+    S3_PATHS+=("models/vae/flux2-vae.safetensors")
 }
 
 # Process all models

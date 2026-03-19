@@ -35,10 +35,12 @@ class ComfyUIVideoGenerator(VideoGenerator):
         wan_t2v_workflow_path = get_asset_path('wanv_t2v.json')
         wan_i2v_workflow_path = get_asset_path('wan_i2v.json')
         ltx_i2v_workflow_path = get_asset_path('LTX-i2v.json')
+        ltx_t2v_workflow_path = get_asset_path('LTX2-t2v.json')
 
         self.wan_t2v_workflow = None
         self.wan_i2v_workflow = None
         self.ltx_i2v_workflow = None
+        self.ltx_t2v_workflow = None
 
         try:
             self.wan_t2v_workflow = json.load(open(wan_t2v_workflow_path, 'r'))
@@ -53,6 +55,13 @@ class ComfyUIVideoGenerator(VideoGenerator):
         except Exception as e:
             print(f"⚠️ LTX-i2v.json not found, LTX i2v will be unavailable: {e}")
             self.ltx_i2v_workflow = None
+
+        try:
+            self.ltx_t2v_workflow = json.load(open(ltx_t2v_workflow_path, 'r'))
+            print("✅ Loaded LTX2-t2v workflow")
+        except Exception as e:
+            print(f"⚠️ LTX2-t2v.json not found, will fallback to WAN t2v: {e}")
+            self.ltx_t2v_workflow = None
 
     async def generate(
         self,
@@ -87,10 +96,13 @@ class ComfyUIVideoGenerator(VideoGenerator):
                     raise Exception('No I2V workflow available (neither LTX nor WAN)')
                 return await self._run_wan_i2v_workflow(prompt, input_image, host, port, ctx)
         else:
-            # Text-to-video workflow
-            if not self.wan_t2v_workflow:
-                raise Exception('WAN T2V workflow json not found')
-            return await self._run_wan_t2v_workflow(prompt, host, port, ctx)
+            # Text-to-video workflow - use LTX2 by default, fallback to WAN
+            if self.ltx_t2v_workflow:
+                return await self._run_ltx_t2v_workflow(prompt, host, port, ctx)
+            elif self.wan_t2v_workflow:
+                return await self._run_wan_t2v_workflow(prompt, host, port, ctx)
+            else:
+                raise Exception('No T2V workflow available (neither LTX2 nor WAN)')
 
     async def _run_wan_t2v_workflow(self, user_prompt: str, host: str, port: str, ctx: dict) -> tuple[str, int, int, int, str]:
         """
@@ -109,6 +121,36 @@ class ComfyUIVideoGenerator(VideoGenerator):
 
         if not execution.outputs:
             raise Exception('No outputs from WAN T2V workflow')
+
+        url = execution.outputs[0]
+
+        # Get video metadata and save
+        video_id = generate_video_id()
+        mime_type, width, height, duration, extension = await get_video_info_and_save(
+            url, os.path.join(FILES_DIR, f'{video_id}')
+        )
+        filename = f'{video_id}.{extension}'
+        return video_id, width, height, int(duration), filename
+
+    async def _run_ltx_t2v_workflow(self, user_prompt: str, host: str, port: str, ctx: dict) -> tuple[str, int, int, int, str]:
+        """
+        Run LTX2 text-to-video workflow
+        """
+        workflow = copy.deepcopy(self.ltx_t2v_workflow)
+
+        # Configure text prompt (node 208 - PrimitiveStringMultiline "Positive prompt")
+        workflow['208']['inputs']['value'] = user_prompt
+
+        # Configure seeds
+        workflow['209']['inputs']['noise_seed'] = random.randint(0, 99999999998)
+        workflow['200']['inputs']['noise_seed'] = random.randint(0, 99999999998)
+
+        print(f"🔧 Workflow params (LTX2-t2v): seed1={workflow['209']['inputs']['noise_seed']}, seed2={workflow['200']['inputs']['noise_seed']}, text_preview={user_prompt[:80]!r}")
+
+        execution = await execute(workflow, host, port, ctx=ctx)
+
+        if not execution.outputs:
+            raise Exception('No outputs from LTX2 T2V workflow')
 
         url = execution.outputs[0]
 
