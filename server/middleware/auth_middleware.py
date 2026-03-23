@@ -36,7 +36,8 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             '/assets/',
             '/socket.io/',
             '/api/auth/',
-            '/api/billing'
+            '/api/billing',
+            '/api/file/'
         ]
 
     async def dispatch(self, request: Request, call_next):
