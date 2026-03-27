@@ -1,300 +1,120 @@
-# EC2 Deployment Guide
+# EC2 部署指南 (G6e/G7e 单机部署)
 
-This guide explains how to deploy the Jaaz application on AWS EC2 with proper network configuration.
+在一台 G6e 或 G7e GPU 实例上同时部署 Open Gallery 和 ComfyUI。
 
-## Prerequisites
+## 1. 启动 EC2 实例
 
-1. **EC2 Instance**: Running Ubuntu/Amazon Linux with sufficient resources
-2. **Security Groups**: Properly configured to allow traffic
-3. **Domain/IP Access**: Public IP or domain name for external access
+- **实例类型**: `g6e.xlarge` 或 `g7e.xlarge`（根据需求选择更大规格）
+- **AMI**: Ubuntu 22.04 LTS (Deep Learning AMI 更佳，自带 CUDA 驱动)
+- **存储**: 至少 100GB gp3（模型文件较大）
+- **安全组入站规则**:
 
-## Security Group Configuration
+| 类型 | 端口 | 来源 | 说明 |
+|------|------|------|------|
+| SSH | 22 | 你的 IP | SSH 登录 |
+| Custom TCP | 5174 | 0.0.0.0/0 | Open Gallery 前端 |
 
-### Required Inbound Rules
+> 后端 API (57988) 和 ComfyUI (8188) 仅本机通信，无需对外开放。
 
-| Type | Protocol | Port Range | Source | Description |
-|------|----------|------------|--------|-------------|
-| HTTP | TCP | 80 | 0.0.0.0/0 | Web traffic (optional, for reverse proxy) |
-| HTTPS | TCP | 443 | 0.0.0.0/0 | Secure web traffic (optional, for reverse proxy) |
-| Custom TCP | TCP | 5174 | 0.0.0.0/0 | Frontend development server |
-| Custom TCP | TCP | 57988 | 0.0.0.0/0 | Backend API server |
-| SSH | TCP | 22 | Your IP | SSH access |
-
-**⚠️ Security Note**: For production, consider restricting access to specific IP ranges instead of 0.0.0.0/0.
-
-## Installation Steps
-
-### 1. System Dependencies
+## 2. 安装系统依赖
 
 ```bash
-# Update system
 sudo apt update && sudo apt upgrade -y
 
-# Install Node.js (18+)
+# Node.js 18+
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# Install Python 3.9+
-sudo apt install python3 python3-pip python3-venv -y
-
-# Install Git
-sudo apt install git -y
+# Python 3.10+ & Git
+sudo apt install -y python3 python3-pip python3-venv git
 ```
 
-### 2. Clone and Setup Project
+## 3. 部署 ComfyUI
 
 ```bash
-# Clone the repository
-git clone <your-repo-url> jaaz
-cd jaaz
+cd ~
+git clone https://github.com/comfyanonymous/ComfyUI.git
+cd ComfyUI
 
-# Setup Python virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 下载所需模型到 models/ 对应目录（根据需要的工作流选择）
+# 例如 FLUX、WAN 等模型放入 models/checkpoints/
+
+# 启动 ComfyUI（监听本机）
+nohup python main.py --listen 127.0.0.1 --port 8188 > ~/comfyui.log 2>&1 &
+```
+
+验证 ComfyUI 运行：
+```bash
+curl http://127.0.0.1:8188/system_stats
+```
+
+## 4. 部署 Open Gallery
+
+```bash
+cd ~
+git clone <your-repo-url> open-gallery
+cd open-gallery
+
+# 后端
 cd server
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Setup Node.js dependencies
+# 前端
 cd ../react
 npm install
 ```
 
-### 3. Configure Application
+## 5. 配置 ComfyUI 后端地址
 
-#### Backend Configuration
-```bash
-cd server
+编辑 `server/user_data/config.toml`，将 ComfyUI 指向本机：
 
-# Create user data directory
-mkdir -p user_data
-
-# Configure Bedrock (if using AWS Bedrock)
-cat > user_data/config.toml << EOF
-[bedrock]
-region = "us-west-2"  # Your EC2 region
-
-[bedrock.models]
-"anthropic.claude-3-5-sonnet-20241022-v2:0" = { type = "text" }
-"anthropic.claude-3-5-haiku-20241022-v1:0" = { type = "text" }
-EOF
+```toml
+[comfyui]
+url = "http://127.0.0.1:8188"
 ```
 
-#### Frontend Configuration
-The application is already configured to work with 0.0.0.0 binding and allows all hosts.
-
-### 4. AWS Credentials (for Bedrock)
+或者通过环境变量设置（不需要改配置文件）：
 
 ```bash
-# Option 1: AWS CLI
-aws configure
-
-# Option 2: Environment variables
-export AWS_ACCESS_KEY_ID=your_access_key
-export AWS_SECRET_ACCESS_KEY=your_secret_key
-export AWS_DEFAULT_REGION=us-west-2
-
-# Option 3: IAM Role (recommended for EC2)
-# Attach an IAM role with Bedrock permissions to your EC2 instance
+export COMFYUI_URL="http://127.0.0.1:8188"
 ```
 
-## Running the Application
+## 6. 启动 Open Gallery
 
-### Development Mode
-
-#### Terminal 1 - Backend
 ```bash
-cd server
+# 终端 1 - 后端
+cd ~/open-gallery/server
 source venv/bin/activate
-python main.py --port 57988
+nohup python main.py --port 57988 > ~/gallery-backend.log 2>&1 &
+
+# 终端 2 - 前端
+cd ~/open-gallery/react
+nohup npm run dev > ~/gallery-frontend.log 2>&1 &
 ```
 
-#### Terminal 2 - Frontend
-```bash
-cd react
-npm run dev
-```
+## 7. 访问
 
-### Production Mode with PM2
+浏览器打开：`http://<EC2公网IP>:5174`
 
-#### Install PM2
-```bash
-sudo npm install -g pm2
-```
+在 Open Gallery 设置页面中可以配置其他 LLM provider 的 API Key（Anthropic、OpenAI、Bedrock 等）。
 
-#### Create PM2 Configuration
-```bash
-cat > ecosystem.config.js << EOF
-module.exports = {
-  apps: [
-    {
-      name: 'jaaz-backend',
-      script: 'server/main.py',
-      args: '--port 57988',
-      interpreter: 'server/venv/bin/python',
-      cwd: '/home/ubuntu/jaaz',
-      env: {
-        NODE_ENV: 'production'
-      }
-    },
-    {
-      name: 'jaaz-frontend',
-      script: 'npm',
-      args: 'run dev',
-      cwd: '/home/ubuntu/jaaz/react',
-      env: {
-        NODE_ENV: 'production'
-      }
-    }
-  ]
-};
-EOF
-```
-
-#### Start Services
-```bash
-pm2 start ecosystem.config.js
-pm2 save
-pm2 startup
-```
-
-## Access URLs
-
-After deployment, access your application at:
-
-- **Frontend**: `http://your-ec2-public-ip:5174`
-- **Backend API**: `http://your-ec2-public-ip:57988`
-- **Example**: `http://ec2-52-24-176-86.us-west-2.compute.amazonaws.com:5174`
-
-## Reverse Proxy Setup (Optional)
-
-For production, consider using Nginx as a reverse proxy:
-
-### Install Nginx
-```bash
-sudo apt install nginx -y
-```
-
-### Configure Nginx
-```bash
-sudo cat > /etc/nginx/sites-available/jaaz << EOF
-server {
-    listen 80;
-    server_name your-domain.com;  # Replace with your domain or IP
-
-    # Frontend
-    location / {
-        proxy_pass http://localhost:5174;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
-
-    # Backend API
-    location /api {
-        proxy_pass http://localhost:57988;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
-
-    # WebSocket support
-    location /ws {
-        proxy_pass http://localhost:57988;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
-
-# Enable the site
-sudo ln -s /etc/nginx/sites-available/jaaz /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"Host not allowed" Error**
-   - ✅ Fixed: The vite.config.ts now allows all hosts
-
-2. **Cannot connect to backend**
-   - Check if port 57988 is open in security groups
-   - Verify backend is running: `ps aux | grep python`
-
-3. **Frontend not accessible**
-   - Check if port 5174 is open in security groups
-   - Verify frontend is running: `ps aux | grep node`
-
-4. **AWS Bedrock access denied**
-   - Check AWS credentials configuration
-   - Verify IAM permissions for Bedrock
-   - Ensure models are enabled in Bedrock console
-
-### Logs and Debugging
+## 排查问题
 
 ```bash
-# Check PM2 logs
-pm2 logs
+# 检查各服务是否运行
+ps aux | grep -E "comfy|main.py|npm"
 
-# Check individual service logs
-pm2 logs jaaz-backend
-pm2 logs jaaz-frontend
+# 查看日志
+tail -f ~/comfyui.log
+tail -f ~/gallery-backend.log
+tail -f ~/gallery-frontend.log
 
-# Check Nginx logs (if using reverse proxy)
-sudo tail -f /var/log/nginx/error.log
-sudo tail -f /var/log/nginx/access.log
+# 检查端口监听
+ss -tlnp | grep -E "8188|57988|5174"
 ```
-
-### Service Management
-
-```bash
-# PM2 commands
-pm2 status          # Check status
-pm2 restart all     # Restart all services
-pm2 stop all        # Stop all services
-pm2 delete all      # Delete all services
-
-# Nginx commands
-sudo systemctl status nginx
-sudo systemctl restart nginx
-sudo systemctl stop nginx
-```
-
-## Security Considerations
-
-1. **Firewall**: Configure UFW or iptables for additional security
-2. **SSL/TLS**: Use Let's Encrypt for HTTPS in production
-3. **Environment Variables**: Store sensitive data in environment variables
-4. **Regular Updates**: Keep system and dependencies updated
-5. **Monitoring**: Set up CloudWatch or other monitoring solutions
-
-## Performance Optimization
-
-1. **Instance Size**: Use appropriate EC2 instance type for your workload
-2. **Storage**: Use SSD storage for better I/O performance
-3. **Memory**: Monitor memory usage, especially for large models
-4. **Network**: Consider using Elastic Load Balancer for high availability
-
-## Backup and Recovery
-
-1. **Code**: Regular Git commits and backups
-2. **Data**: Backup user_data directory regularly
-3. **AMI**: Create AMI snapshots of configured instances
-4. **Database**: If using external database, ensure regular backups
