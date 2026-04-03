@@ -34,7 +34,7 @@ class ComfyUIVideoGenerator(VideoGenerator):
         # Load video workflows
         wan_t2v_workflow_path = get_asset_path('wanv_t2v.json')
         wan_i2v_workflow_path = get_asset_path('wan_i2v.json')
-        ltx_i2v_workflow_path = get_asset_path('LTX-i2v.json')
+        ltx_i2v_workflow_path = get_asset_path('LTX2-3-i2v.json')
         ltx_t2v_workflow_path = get_asset_path('LTX2-t2v.json')
 
         self.wan_t2v_workflow = None
@@ -51,9 +51,9 @@ class ComfyUIVideoGenerator(VideoGenerator):
 
         try:
             self.ltx_i2v_workflow = json.load(open(ltx_i2v_workflow_path, 'r'))
-            print("✅ Loaded LTX-i2v workflow")
+            print("✅ Loaded LTX2-3-i2v workflow")
         except Exception as e:
-            print(f"⚠️ LTX-i2v.json not found, LTX i2v will be unavailable: {e}")
+            print(f"⚠️ LTX2-3-i2v.json not found, LTX i2v will be unavailable: {e}")
             self.ltx_i2v_workflow = None
 
         try:
@@ -204,29 +204,31 @@ class ComfyUIVideoGenerator(VideoGenerator):
 
     async def _run_ltx_i2v_workflow(self, user_prompt: str, input_image_base64: Optional[str], host: str, port: str, ctx: dict) -> tuple[str, int, int, int, str]:
         """
-        Run LTX image-to-video workflow
+        Run LTX2-3 image-to-video workflow
         """
         workflow = copy.deepcopy(self.ltx_i2v_workflow)
 
+        # Configure input image (node 98 - ETN_LoadImageBase64)
         if input_image_base64:
-            workflow['205']['inputs']['image'] = input_image_base64
+            workflow['98']['inputs']['image'] = input_image_base64
         else:
             placeholder_image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQIHWNgAAIAAAUAAY27m/MAAAAASUVORK5CYII="
-            workflow['205']['inputs']['image'] = placeholder_image
-            print("🔍 DEBUG: Using placeholder image for LTX I2V workflow (no input image provided)")
+            workflow['98']['inputs']['image'] = placeholder_image
+            print("🔍 DEBUG: Using placeholder image for LTX2-3 I2V workflow (no input image provided)")
 
-        # Configure text prompt (node 250 - Text Multiline)
-        workflow['250']['inputs']['text'] = user_prompt
+        # Configure text prompt (node 233 - Text Multiline)
+        workflow['233']['inputs']['text'] = user_prompt
 
-        # Configure seed (node 227 - RandomNoise)
-        workflow['227']['inputs']['noise_seed'] = random.randint(0, 99999999998)
+        # Configure seeds (node 201 - RandomNoise, node 214 - KSampler)
+        workflow['201']['inputs']['noise_seed'] = random.randint(0, 99999999998)
+        workflow['214']['inputs']['seed'] = random.randint(0, 99999999998)
 
-        print(f"🔧 Workflow params (LTX-i2v): has_input={bool(input_image_base64)}, seed={workflow['227']['inputs']['noise_seed']}, text_preview={user_prompt[:80]!r}")
+        print(f"🔧 Workflow params (LTX2-3-i2v): has_input={bool(input_image_base64)}, seed1={workflow['201']['inputs']['noise_seed']}, seed2={workflow['214']['inputs']['seed']}, text_preview={user_prompt[:80]!r}")
 
         execution = await execute(workflow, host, port, ctx=ctx)
 
         if not execution.outputs:
-            raise Exception('No outputs from LTX I2V workflow')
+            raise Exception('No outputs from LTX2-3 I2V workflow')
 
         url = execution.outputs[0]
 
