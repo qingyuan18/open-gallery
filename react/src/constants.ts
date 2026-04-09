@@ -149,7 +149,8 @@ export const DEFAULT_PROVIDERS_CONFIG: { [key: string]: LLMConfig } = {
   // },
   bedrock: {
     models: {
-      'us.anthropic.claude-opus-4-6-v1:0': { type: 'text' },
+      'anthropic.claude-opus-4-6-v1': { type: 'text' },
+      'anthropic.claude-sonnet-4-6': { type: 'text' },
       'us.anthropic.claude-sonnet-4-5-20250929-v1:0': { type: 'text' },
     },
     url: '',
