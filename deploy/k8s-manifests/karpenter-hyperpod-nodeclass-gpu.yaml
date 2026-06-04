@@ -13,6 +13,6 @@ spec:
   # Map to pre-created HyperPod InstanceGroups for GPU capacity
   # Recommend setting those InstanceGroups' desired count to 0 and let Karpenter provision on demand
   instanceGroups:
-  - ${HP_INSTANCE_GROUP_1}
-  #- ${HP_INSTANCE_GROUP_2}
+  - ${HP_INSTANCE_GROUP_1:-worker-group-1}
+  - ${HP_INSTANCE_GROUP_2:-worker-group3}
 

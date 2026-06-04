@@ -32,6 +32,11 @@ spec:
       serviceAccountName: comfyui-prewarm-sa
       nodeSelector:
         workload: gpu
+      # Karpenter GPU nodes are tainted with nvidia.com/gpu=true:NoSchedule.
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
       containers:
       - name: prewarm
         image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/daemonset-s3-sync:latest
@@ -44,11 +49,19 @@ spec:
         args:
         - |
           set -e
+          # Sync all model subdirectories, but under diffusion_models/ only
+          # keep Flux* to trim cold-start. Filters apply in order:
+          # 1. exclude everything under diffusion_models/
+          # 2. re-include only diffusion_models/Flux*
           mkdir -p /opt/dlami/nvme/comfyui-models
           S3_SRC="s3://comfyui-models-bucket-687912291502/models/"
           DST="/opt/dlami/nvme/comfyui-models/"
-          echo "[awscli] syncing: ${S3_SRC} -> ${DST}"
-          aws s3 sync "${S3_SRC}" "${DST}"
+          aws configure set default.s3.max_concurrent_requests 50
+          aws configure set default.s3.multipart_chunksize 64MB
+          echo "[awscli] syncing: ${S3_SRC} -> ${DST} (diffusion_models limited to flux1*)"
+          aws s3 sync "${S3_SRC}" "${DST}" \
+            --exclude "diffusion_models/*" \
+            --include "diffusion_models/flux1*"
           echo "[awscli] sync completed"
           sleep infinity
         env:

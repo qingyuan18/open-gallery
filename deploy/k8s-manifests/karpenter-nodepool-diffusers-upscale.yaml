@@ -1,0 +1,48 @@
+# NodePool for the diffusers-upscale workload, on g7e.4xlarge.
+#
+# Distinct name (`upscale`) and label (`workload=upscale`) so this NodePool
+# only picks up the diffusers-upscale Deployment and never receives stray
+# comfyui pods. Comfyui's NodePool stays on g6e.4xlarge.
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: upscale
+spec:
+  template:
+    metadata:
+      labels:
+        workload: "upscale"
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: upscale
+      taints:
+      - key: nvidia.com/gpu
+        value: "true"
+        effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        # User explicitly asked for g7e.4xlarge for this scale test.
+        # Note: comfyui-flux runs on g6e because g7e spot occasionally returns
+        # RTX PRO 6000 Blackwell (sm_120) which the cu12 base image can't run.
+        # The diffusers-upscale image uses the SAME nvcr 24.12 base, so the
+        # same risk applies — if pods CrashLoopBackOff with sm_120, narrow
+        # this to g6e.4xlarge. Keeping g7e per request for now.
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["g7e.4xlarge"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 1m
+    budgets:
+    - nodes: "50%"

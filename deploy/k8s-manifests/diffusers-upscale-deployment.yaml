@@ -1,0 +1,133 @@
+---
+# Diffusers SD x4 Upscaler — model baked into the image, image baked into the AMI.
+# Independent from comfyui (different name, label, nodeSelector key).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: diffusers-upscale-sa
+  namespace: default
+  labels:
+    app: diffusers-upscale
+  annotations:
+    # Reuse ComfyUICloudWatchRole — same IAM permissions (cloudwatch:PutMetricData
+    # for the sidecar). If you ever want a tighter role, swap the ARN here.
+    eks.amazonaws.com/role-arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/ComfyUICloudWatchRole
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diffusers-upscale
+  namespace: default
+  labels:
+    app: diffusers-upscale
+    deployment-type: image-baked
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: diffusers-upscale
+  template:
+    metadata:
+      labels:
+        app: diffusers-upscale
+    spec:
+      serviceAccountName: diffusers-upscale-sa
+
+      # workload=upscale lets us route to a dedicated NodePool that the comfyui
+      # workload doesn't share (different AMI, different scale-test).
+      nodeSelector:
+        workload: upscale
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+
+      containers:
+      - name: diffusers-upscale
+        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/diffusers-upscale:latest
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            memory: "32Gi"
+            cpu: "4"
+          requests:
+            nvidia.com/gpu: 1
+            memory: "8Gi"
+            cpu: "1"
+
+        # SD x4 pipeline load is ~30s on first call. Allow a generous startup
+        # window before liveness kicks in.
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 60   # 5 min total
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PORT
+          value: "8000"
+
+      # Reuse the comfyui-queue-metrics image — it polls /queue and publishes
+      # CloudWatch QueuePending. Our server.py exposes the same /queue shape.
+      - name: queue-metrics
+        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/comfyui-queue-metrics:latest
+        imagePullPolicy: Always
+        env:
+        - name: AWS_DEFAULT_REGION
+          value: "${AWS_REGION}"
+        - name: COMFYUI_QUEUE_URL
+          value: "http://127.0.0.1:8000/queue"
+        - name: METRIC_NAMESPACE
+          value: "DiffusersUpscale"
+        - name: METRIC_NAME
+          value: "QueuePending"
+        - name: METRIC_DIMENSION_NAME
+          value: "Deployment"
+        - name: METRIC_DIMENSION_VALUE
+          value: "diffusers-upscale"
+        - name: POLL_INTERVAL_SEC
+          value: "2"
+        - name: PUBLISH_TOTAL
+          value: "false"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi

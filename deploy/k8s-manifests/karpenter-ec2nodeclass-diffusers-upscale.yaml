@@ -1,0 +1,83 @@
+# EC2NodeClass for the diffusers-upscale workload.
+# Pairs with karpenter-nodepool-diffusers-upscale.yaml + the AMI baked by
+# build-diffusers-upscale-ami.sh.
+#
+# Distinct name (`upscale`) so it does NOT collide with the existing `gpu`
+# EC2NodeClass that comfyui uses.
+---
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: upscale
+spec:
+  amiFamily: AL2023
+  # Replaced by build-diffusers-upscale-ami.sh. Until you bake the AMI, this
+  # placeholder will fail node provisioning — that's intentional, fix it after
+  # the bake completes.
+  amiSelectorTerms:
+  - id: ami-014a78b4e67945c0f
+
+  role: "KarpenterNodeRole-hp-eks"
+
+  subnetSelectorTerms:
+  - id: subnet-02a0c90865eb51a75   # us-east-1b (FSR-enabled for the upscale AMI snapshot)
+  - id: subnet-0a324242d59b02ef1   # us-east-1a (fallback when 1b g7e capacity is exhausted)
+  - id: subnet-0599740fc1a107a41   # us-east-1d (added 2026-05-21 — only AZ AWS reports has g7e capacity; no FSR)
+
+  securityGroupSelectorTerms:
+  - id: sg-0176fe82167b34c56
+  - id: sg-021ac8869b9cdfce8
+  - id: sg-0ebc984a304afacf4
+
+  # Must be >= the AMI snapshot size (130GiB on the cu13 image).
+  blockDeviceMappings:
+  - deviceName: /dev/xvda
+    ebs:
+      volumeSize: 130Gi
+      volumeType: gp3
+      iops: 6000
+      throughput: 1000
+      deleteOnTermination: true
+
+  # No model seed copy — model is inside the container image. NVMe formatted &
+  # mounted only as a scratch dir (handy for any future temp output).
+  userData: |
+    MIME-Version: 1.0
+    Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+    --BOUNDARY
+    Content-Type: text/x-shellscript; charset="us-ascii"
+
+    #!/bin/bash
+    set -euxo pipefail
+
+    MOUNT_POINT="/opt/dlami/nvme"
+    mkdir -p "$MOUNT_POINT"
+
+    DEV=""
+    for d in /dev/nvme*n1; do
+      [ -b "$d" ] || continue
+      if findmnt -n "$d" >/dev/null 2>&1; then continue; fi
+      if lsblk -nr "$d" | awk 'NR>1 && $6=="part"{found=1} END{exit !found}'; then
+        continue
+      fi
+      DEV="$d"; break
+    done
+
+    if [ -z "$DEV" ]; then
+      echo "No instance-store NVMe detected; pods will run from EBS root only."
+      exit 0
+    fi
+    echo "Using device: $DEV"
+
+    if ! blkid "$DEV" >/dev/null 2>&1; then
+      mkfs.xfs -f "$DEV"
+    fi
+    UUID=$(blkid -s UUID -o value "$DEV")
+    if ! grep -q "$UUID" /etc/fstab; then
+      echo "UUID=$UUID  $MOUNT_POINT  xfs  defaults,nofail,x-systemd.device-timeout=5  0 0" >> /etc/fstab
+    fi
+    mount -a
+    chmod 1777 "$MOUNT_POINT"
+
+    --BOUNDARY--

@@ -1,3 +1,10 @@
+---
+# Deployment using the comfyui-s3-flux image which has Flux models baked in.
+# Differences vs comfyui-deployment.yaml:
+#   - image: comfyui-s3-flux:latest (not comfyui-s3:latest)
+#   - NO hostPath mount of /opt/program/models  (the image already has models inside)
+# Pair with the new AMI built by build-flux-image-baked-ami.sh that pre-pulls
+# this image into containerd's k8s.io namespace.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,7 +13,7 @@ metadata:
   labels:
     app: comfyui
     version: v1
-    deployment-type: s3
+    deployment-type: flux-baked
 spec:
   replicas: 1
   strategy:
@@ -27,8 +34,6 @@ spec:
 
       nodeSelector:
         workload: gpu
-      # Karpenter GPU NodePool taints nodes with nvidia.com/gpu=true:NoSchedule
-      # so only pods that explicitly tolerate it schedule here.
       tolerations:
       - key: nvidia.com/gpu
         operator: Exists
@@ -36,17 +41,18 @@ spec:
 
       containers:
       - name: comfyui
-        # S3 mount version - smaller image, requires S3 CSI driver
-        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/comfyui-s3:latest
+        # Image with Flux models baked at /opt/program/models/<subtype>/.
+        # Must be pre-pulled into the AMI for fast cold start; pulling 39 GiB
+        # at pod startup defeats the purpose.
+        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/comfyui-s3-flux:latest
         imagePullPolicy: IfNotPresent
 
-        # Explicit startup command (same as standalone deployment)
         command:
         - bash
         - -lc
         - |
           mkdir -p /tmp/comfyui-logs
-          echo "🚀 Starting ComfyUI at $(date)" | tee /tmp/comfyui-logs/comfyui_runtime.log
+          echo "Starting ComfyUI at $(date)" | tee /tmp/comfyui-logs/comfyui_runtime.log
           python -u main.py --listen 0.0.0.0 --port 8188 2>&1 | tee -a /tmp/comfyui-logs/comfyui_runtime.log
 
         ports:
@@ -62,7 +68,6 @@ spec:
             nvidia.com/gpu: 1
             memory: "16Gi"
             cpu: "1"
-        # Health checks
         livenessProbe:
           httpGet:
             path: /
@@ -79,14 +84,9 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 5
           failureThreshold: 3
-        # Volume mounts
-        volumeMounts:
-        # Mount NVMe models via hostPath
-        - name: nvme-host
-          mountPath: /opt/program/models
-          readOnly: true
 
-        # Environment variables
+        # No volumeMounts — models are inside the image.
+
         env:
         - name: NVIDIA_VISIBLE_DEVICES
           value: "all"
@@ -94,19 +94,6 @@ spec:
           value: "compute,utility"
         - name: PYTHONUNBUFFERED
           value: "1"
-        # Optional: AWS credentials for S3 access (if not using IRSA)
-        # - name: AWS_ACCESS_KEY_ID
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: aws-credentials
-        #       key: access-key-id
-        # - name: AWS_SECRET_ACCESS_KEY
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: aws-credentials
-        #       key: secret-access-key
-        # - name: AWS_DEFAULT_REGION
-        #   value: "us-west-2"
 
       - name: comfyui-cw-metrics
         image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/comfyui-queue-metrics:latest
@@ -136,11 +123,4 @@ spec:
             cpu: 200m
             memory: 128Mi
 
-      # Volumes
-      volumes:
-      # NVMe hostPath for models
-      - name: nvme-host
-        hostPath:
-          path: /opt/dlami/nvme/comfyui-models
-          type: DirectoryOrCreate
-
+      # No volumes — image self-contained.

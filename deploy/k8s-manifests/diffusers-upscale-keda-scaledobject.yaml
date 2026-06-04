@@ -1,0 +1,40 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: diffusers-upscale-cw-scaler
+  namespace: default
+  labels:
+    app: diffusers-upscale
+spec:
+  scaleTargetRef:
+    name: diffusers-upscale
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  cooldownPeriod: 120
+  pollingInterval: 5
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+        scaleDown:
+          stabilizationWindowSeconds: 180
+  triggers:
+  - type: aws-cloudwatch
+    metadata:
+      # Distinct namespace so we don't collide with ComfyUI's metrics
+      namespace: "DiffusersUpscale"
+      metricName: "QueuePending"
+      dimensionName: "Deployment"
+      dimensionValue: "diffusers-upscale"
+      targetMetricValue: "1"
+      activationTargetMetricValue: "0.5"
+      minMetricValue: "0"
+      ignoreNullValues: "true"
+      metricStat: "Average"
+      metricStatPeriod: "10"
+      metricCollectionTime: "30"
+      metricEndTimeOffset: "0"
+      awsRegion: "us-east-1"
+    authenticationRef:
+      name: comfyui-cw-auth   # Reuse — same KEDA operator IRSA, just different metric

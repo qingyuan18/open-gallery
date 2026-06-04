@@ -81,9 +81,9 @@ parse_arguments() {
     done
 
     # Validate app name
-    if [[ ! "$APP_TO_BUILD" =~ ^(open-gallery|comfyui-s3|comfyui-queue-metrics|daemonset-s3-sync|all)$ ]]; then
+    if [[ ! "$APP_TO_BUILD" =~ ^(open-gallery|comfyui-s3|comfyui-s3-flux|comfyui-queue-metrics|daemonset-s3-sync|all)$ ]]; then
         print_error "Invalid app name: $APP_TO_BUILD"
-        print_error "Valid options: open-gallery, comfyui-s3, comfyui-queue-metrics, daemonset-s3-sync, all"
+        print_error "Valid options: open-gallery, comfyui-s3, comfyui-s3-flux, comfyui-queue-metrics, daemonset-s3-sync, all"
         exit 1
     fi
 }
@@ -233,6 +233,10 @@ display_summary() {
         print_info "ComfyUI (S3): ${ECR_REGISTRY}/comfyui-s3:${IMAGE_TAG}"
     fi
 
+    if [ "$APP_TO_BUILD" == "comfyui-s3-flux" ]; then
+        print_info "ComfyUI (S3 + Flux baked): ${ECR_REGISTRY}/comfyui-s3-flux:${IMAGE_TAG}"
+    fi
+
     if [ "$APP_TO_BUILD" == "all" ] || [ "$APP_TO_BUILD" == "comfyui-queue-metrics" ]; then
         print_info "ComfyUI Queue Metrics: ${ECR_REGISTRY}/comfyui-queue-metrics:${IMAGE_TAG}"
     fi
@@ -257,7 +261,8 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  --app <name>      Application to build (default: all)"
-    echo "                    Options: open-gallery, comfyui-s3, comfyui-queue-metrics, daemonset-s3-sync, all"
+    echo "                    Options: open-gallery, comfyui-s3, comfyui-s3-flux, comfyui-queue-metrics, daemonset-s3-sync, all"
+    echo "                    Note: comfyui-s3-flux is excluded from 'all' (image is ~39 GiB)"
     echo "  --tag <tag>       Image tag (default: latest)"
     echo "  --region <region> AWS region (default: us-west-2)"
     echo "  --help            Show this help message"
@@ -299,6 +304,15 @@ main() {
         build_and_push_app "comfyui-s3" \
             "deploy/comfyui-s3.dockerfile" \
             "comfyui-s3" \
+            "."
+    fi
+
+    # NOTE: comfyui-s3-flux bakes ~22 GiB of Flux models into the image; only
+    # build it when explicitly requested, never as part of "all".
+    if [ "$APP_TO_BUILD" == "comfyui-s3-flux" ]; then
+        build_and_push_app "comfyui-s3-flux" \
+            "deploy/comfyui-s3-flux.dockerfile" \
+            "comfyui-s3-flux" \
             "."
     fi
 

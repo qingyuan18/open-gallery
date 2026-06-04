@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" font-family="'Segoe UI', Arial, sans-serif" font-size="13">
+  <defs>
+    <linearGradient id="frontendGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1"/>
+    </linearGradient>
+    <linearGradient id="backendGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#f5576c;stop-opacity:0.15"/>
+    </linearGradient>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- Frontend Layer -->
+  <rect x="60" y="20" width="680" height="100" rx="12" fill="url(#frontendGrad)" filter="url(#shadow)"/>
+  <text x="400" y="50" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Frontend Layer (React 19 + Vite)</text>
+  <text x="400" y="75" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="12">Canvas Editor | Chat Interface | Settings | i18n</text>
+  <text x="400" y="97" text-anchor="middle" fill="rgba(255,255,255,0.75)" font-size="11">State: Zustand | Drawing: Excalidraw / tldraw</text>
+
+  <!-- Connection Arrow: Frontend -> Backend -->
+  <line x1="400" y1="120" x2="400" y2="165" stroke="#555" stroke-width="2" stroke-dasharray="5,3"/>
+  <polygon points="394,162 400,172 406,162" fill="#555"/>
+  <text x="410" y="148" fill="#555" font-size="10">HTTP + WebSocket (Socket.io)</text>
+
+  <!-- Backend Layer -->
+  <rect x="60" y="175" width="680" height="130" rx="12" fill="#f8f9ff" stroke="#ddd" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="400" y="200" text-anchor="middle" fill="#333" font-size="16" font-weight="bold">Backend Layer (Python FastAPI)</text>
+
+  <!-- Inner box -->
+  <rect x="90" y="212" width="620" height="78" rx="8" fill="white" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="400" y="235" text-anchor="middle" fill="#444" font-size="12">API Routers: Agent / Canvas / Chat / Auth / Config</text>
+  <text x="400" y="257" text-anchor="middle" fill="#444" font-size="12">Services: ConfigService / DBService / UserService</text>
+  <text x="400" y="279" text-anchor="middle" fill="#444" font-size="12">Tools: ImageGenerators / VideoGenerators / Agents</text>
+
+  <!-- Connection Lines: Backend -> Services -->
+  <line x1="200" y1="305" x2="200" y2="360" stroke="#555" stroke-width="1.5"/>
+  <polygon points="194,357 200,367 206,357" fill="#555"/>
+
+  <line x1="400" y1="305" x2="400" y2="360" stroke="#555" stroke-width="1.5"/>
+  <polygon points="394,357 400,367 406,357" fill="#555"/>
+
+  <line x1="600" y1="305" x2="600" y2="360" stroke="#555" stroke-width="1.5"/>
+  <polygon points="594,357 600,367 606,357" fill="#555"/>
+
+  <!-- ComfyUI Box -->
+  <rect x="115" y="370" width="170" height="90" rx="10" fill="#fff3e0" stroke="#ff9800" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="200" y="400" text-anchor="middle" fill="#e65100" font-size="14" font-weight="bold">ComfyUI</text>
+  <text x="200" y="420" text-anchor="middle" fill="#bf360c" font-size="11">(GPU Workers)</text>
+  <text x="200" y="440" text-anchor="middle" fill="#888" font-size="10">SD / Flux / WAN Video</text>
+
+  <!-- LLM Box -->
+  <rect x="315" y="370" width="170" height="90" rx="10" fill="#e8f5e9" stroke="#4caf50" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="400" y="400" text-anchor="middle" fill="#1b5e20" font-size="14" font-weight="bold">LLM</text>
+  <text x="400" y="420" text-anchor="middle" fill="#2e7d32" font-size="11">(Claude / OpenAI)</text>
+  <text x="400" y="440" text-anchor="middle" fill="#888" font-size="10">Ollama / Bedrock</text>
+
+  <!-- Database Box -->
+  <rect x="515" y="370" width="170" height="90" rx="10" fill="#e3f2fd" stroke="#2196f3" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="600" y="400" text-anchor="middle" fill="#0d47a1" font-size="14" font-weight="bold">Database</text>
+  <text x="600" y="420" text-anchor="middle" fill="#1565c0" font-size="11">(DynamoDB / SQLite)</text>
+  <text x="600" y="440" text-anchor="middle" fill="#888" font-size="10">S3 (Models &amp; Files)</text>
+
+  <!-- Scaling annotation -->
+  <rect x="60" y="480" width="680" height="30" rx="6" fill="#fafafa" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="400" y="500" text-anchor="middle" fill="#666" font-size="11">Orchestration: EKS + Karpenter (Node Scaling) + KEDA (Pod Scaling) | Storage: S3 CSI + NVMe Prewarm</text>
+</svg>

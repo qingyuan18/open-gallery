@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: diffusers-upscale
+  namespace: default
+  labels:
+    app: diffusers-upscale
+spec:
+  type: ClusterIP
+  selector:
+    app: diffusers-upscale
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  # No sessionAffinity: /upscale is stateless; stickiness would funnel all
+  # requests from one client IP to one pod and defeat KEDA scale-out.
+  sessionAffinity: None

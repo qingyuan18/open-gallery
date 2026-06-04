@@ -16,8 +16,13 @@ spec:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
         name: gpu
-      # No taints here to avoid changing current Deployment. If you later
-      # add a GPU taint, remember to add matching tolerations to workloads.
+      # Taint so only pods that explicitly tolerate it (e.g. comfyui) land here.
+      # Prevents stray Deployments (hyperpod-dependencies-*, spark-operator-*)
+      # from pinning the node and blocking Karpenter consolidation.
+      taints:
+      - key: nvidia.com/gpu
+        value: "true"
+        effect: NoSchedule
       requirements:
         # Architecture/OS
         - key: kubernetes.io/arch
@@ -26,20 +31,26 @@ spec:
         - key: kubernetes.io/os
           operator: In
           values: ["linux"]
-        # GPU instance families (adjust as needed)
-        - key: karpenter.k8s.aws/instance-family
+        # Allow only L40S (48GB) instance types. g7e gets randomly substituted
+        # with RTX PRO 6000 Blackwell (sm_120) by AWS spot pool, which the
+        # PyTorch in our base image doesn't support — pods CrashLoopBackOff.
+        # g6e.4xlarge is guaranteed L40S.
+        - key: node.kubernetes.io/instance-type
           operator: In
-          values: ["g5", "g6e"]
-        # Capacity type: default to on-demand for stability; change to ["spot"] if desired
+          values: ["g6e.4xlarge"]
+        # Allow spot + on-demand. Karpenter will prefer spot (cheaper) and fall
+        # back to on-demand if spot capacity is not available.
         - key: karpenter.sh/capacity-type
           operator: In
-          values: ["on-demand"]
+          values: ["spot", "on-demand"]
   disruption:
     # Only consolidate empty nodes to avoid disrupting in-use GPU nodes
     consolidationPolicy: WhenEmpty
-    # Wait a bit after pods are added/removed to avoid churn with KEDA scale-down
-    consolidateAfter: 2m
-    # Limit voluntary disruptions to one node at a time to avoid multi-node replacement
+    # Reclaim empty nodes 1 min after they go idle. Pods get up to terminationGracePeriod
+    # to drain; setting this much shorter risks killing in-flight Flux jobs.
+    consolidateAfter: 1m
+    # Allow up to 50% of GPU nodes to be disrupted concurrently so a 4→1 scale-down
+    # doesn't take 4× the per-node consolidation interval.
     budgets:
-    - nodes: "1"
+    - nodes: "50%"
 

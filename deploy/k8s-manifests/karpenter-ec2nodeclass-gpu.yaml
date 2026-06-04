@@ -1,34 +1,172 @@
-# Minimal EC2NodeClass for GPU nodes provisioned by Karpenter
-# Usage:
-#   export CLUSTER_NAME=<your-eks-cluster-name>
-#   export SUBNET_ID_1=subnet-xxxxxxxx SUBNET_ID_2=subnet-yyyyyyyy
-#   export SG_ID_1=sg-aaaaaaaa SG_ID_2=sg-bbbbbbbb
-#   export AMI_ID=ami-0abcde1234567890f   # DLAMI for HyperPod (AL2023-based recommended)
-#   envsubst '${CLUSTER_NAME} ${SUBNET_ID_1} ${SUBNET_ID_2} ${SG_ID_1} ${SG_ID_2} ${AMI_ID}' < deploy/k8s-manifests/karpenter-ec2nodeclass-gpu.yaml | kubectl apply -f -
+# EC2NodeClass for GPU nodes provisioned by standard EKS Karpenter.
+# Subnet / security groups match the HyperPod-cluster-eks01 InstanceGroup network
+# so Karpenter-launched nodes share the same VPC plane.
 ---
 apiVersion: karpenter.k8s.aws/v1
 kind: EC2NodeClass
 metadata:
   name: gpu
 spec:
-  # Use AL2023 family for DLAMI-based HyperPod nodes.
-  # amiFamily controls bootstrap/user-data template. Ensure your DLAMI base OS is AL2023.
   amiFamily: AL2023
-
-  # Pin to a specific DLAMI by AMI ID (recommended for HyperPod-style nodes)
+  # Custom AMI built from EKS AL2023 NVIDIA base with comfyui-s3:latest pre-pulled
+  # into containerd k8s.io namespace AND ~22GiB Flux test models pre-staged at
+  # /opt/comfyui-models-seed (copied to /opt/dlami/nvme/comfyui-models in userData).
+  # This eliminates the need for the comfyui-nvme-prewarm DaemonSet on cold start.
   amiSelectorTerms:
-  - id: ${AMI_ID}
+  - id: ami-0455c87301b10cddf
 
-  # One of role or instanceProfile is required. This assumes you installed Karpenter
-  # using the recommended AWS quickstart, which creates this role name.
-  role: "KarpenterNodeRole-${CLUSTER_NAME}"
+  # Standard Karpenter quickstart node role for cluster hp-eks.
+  role: "KarpenterNodeRole-hp-eks"
 
-  # Select subnets and security groups by ID (no discovery tags required).
+  # Same subnet as HyperPod gpu-grp-smt2 (us-east-1b).
   subnetSelectorTerms:
-  - id: ${SUBNET_ID_1}
-  - id: ${SUBNET_ID_2}
+  - id: subnet-02a0c90865eb51a75
+
+  # HyperPod security groups (inherits cluster SG and worker SG rules).
   securityGroupSelectorTerms:
-  - id: ${SG_ID_1}
-  - id: ${SG_ID_2}
+  - id: sg-0176fe82167b34c56
+  - id: sg-021ac8869b9cdfce8
+  - id: sg-0ebc984a304afacf4
 
+  # AMI root snapshot is 90GiB (system + comfyui image + ~22GiB Flux seed,
+  # tightened from 130GiB v1). gp3 throughput maxed at 1000 MB/s so the
+  # chunked-dd seed -> NVMe copy saturates EBS read bandwidth.
+  blockDeviceMappings:
+  - deviceName: /dev/xvda
+    ebs:
+      volumeSize: 90Gi
+      volumeType: gp3
+      iops: 16000
+      throughput: 1000
+      deleteOnTermination: true
 
+  # Format and mount the instance-store NVMe at /opt/dlami/nvme, then seed
+  # /opt/dlami/nvme/comfyui-models from /opt/comfyui-models-seed (baked into
+  # the AMI's EBS root). This replaces the comfyui-nvme-prewarm DaemonSet:
+  # pods can mount the NVMe hostPath as soon as the node is Ready.
+  userData: |
+    MIME-Version: 1.0
+    Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+    --BOUNDARY
+    Content-Type: text/x-shellscript; charset="us-ascii"
+
+    #!/bin/bash
+    set -euxo pipefail
+
+    MOUNT_POINT="/opt/dlami/nvme"
+    MODELS_DIR="$MOUNT_POINT/comfyui-models"
+    # Seed root in the AMI is /opt/comfyui-models-seed, but its layout is
+    # `models/<subtype>/<file>`. ComfyUI mounts this dir at /opt/program/models
+    # (no leading 'models/'), so we strip the extra layer by sourcing from
+    # /opt/comfyui-models-seed/models.
+    SEED_DIR="/opt/comfyui-models-seed/models"
+    mkdir -p "$MOUNT_POINT"
+
+    # Find the first unpartitioned, unmounted NVMe block device.
+    # Selects the instance-store NVMe and skips the EBS root (partitioned, mounted at /).
+    DEV=""
+    for d in /dev/nvme*n1; do
+      [ -b "$d" ] || continue
+      if findmnt -n "$d" >/dev/null 2>&1; then continue; fi
+      if lsblk -nr "$d" | awk 'NR>1 && $6=="part"{found=1} END{exit !found}'; then
+        continue
+      fi
+      DEV="$d"; break
+    done
+
+    if [ -z "$DEV" ]; then
+      echo "No instance-store NVMe detected; falling back to seed dir directly"
+      mkdir -p "$MODELS_DIR"
+      if [ -d "$SEED_DIR" ]; then
+        # Bind-mount seed at the expected path so pods see models without copy.
+        mount --bind "$SEED_DIR" "$MODELS_DIR"
+      fi
+      exit 0
+    fi
+    echo "Using device: $DEV"
+
+    if ! blkid "$DEV" >/dev/null 2>&1; then
+      mkfs.xfs -f "$DEV"
+    fi
+
+    UUID=$(blkid -s UUID -o value "$DEV")
+    if ! grep -q "$UUID" /etc/fstab; then
+      echo "UUID=$UUID  $MOUNT_POINT  xfs  defaults,nofail,x-systemd.device-timeout=5  0 0" >> /etc/fstab
+    fi
+    mount -a
+    chmod 1777 "$MOUNT_POINT"
+
+    # Seed models from EBS-root (FSR-warmed) into NVMe.
+    # Most of the 22GiB is in 1-4 large files. Plain xargs -P caps at the
+    # number of files. To saturate EBS gp3 read bandwidth, split files
+    # >LARGE_BYTES into 8 byte-ranges copied via dd in parallel; smaller
+    # files use plain cp. Threshold expressed in bytes to avoid the GNU
+    # `find -size NG` rounding pitfall (it floors the size to whole GiB).
+    mkdir -p "$MODELS_DIR"
+    if [ -d "$SEED_DIR" ] && [ -z "$(ls -A "$MODELS_DIR" 2>/dev/null)" ]; then
+      echo "Seeding $MODELS_DIR from $SEED_DIR (chunked parallel) ..."
+      SEED_START=$(date +%s)
+      CHUNKS=8
+      LARGE_BYTES=$((100 * 1024 * 1024))        # 100 MiB; covers clip_l (1.6G), ae (320M), t5xxl (4.6G), flux (16G)
+
+      # Recreate directory tree.
+      (cd "$SEED_DIR" && find . -type d -print0) | (cd "$MODELS_DIR" && xargs -0 -r -I{} mkdir -p "{}")
+
+      # Small files (< LARGE_BYTES): plain parallel cp.
+      (cd "$SEED_DIR" && find . -type f -size -"${LARGE_BYTES}"c -print0) \
+        | (cd "$MODELS_DIR" && xargs -0 -r -P 8 -I{} cp -a --preserve=mode,timestamps "$SEED_DIR"/{} ./{})
+
+      # Large files (>= LARGE_BYTES): chunk + parallel dd. Pre-allocate all
+      # destinations first, then launch every chunk of every file concurrently
+      # so EBS read bandwidth (1000 MB/s gp3) is saturated end-to-end. Cap
+      # total concurrent dd at MAX_PAR to avoid kernel queue thrashing.
+      MAX_PAR=16
+      LARGE_LIST=$(mktemp)
+      (cd "$SEED_DIR" && find . -type f -size +"$((LARGE_BYTES - 1))"c -print0 \
+        | while IFS= read -r -d '' p; do printf '%s\0' "$SEED_DIR/${p#./}"; done) > "$LARGE_LIST"
+
+      # Pre-allocate (cheap, sequential).
+      while IFS= read -r -d '' src; do
+        rel="${src#$SEED_DIR/}"
+        dst="$MODELS_DIR/$rel"
+        size=$(stat -c %s "$src")
+        truncate -s "$size" "$dst"
+      done < "$LARGE_LIST"
+
+      # Launch all chunks concurrently with a semaphore.
+      sem() { while [ "$(jobs -rp | wc -l)" -ge "$MAX_PAR" ]; do wait -n; done; }
+      while IFS= read -r -d '' src; do
+        rel="${src#$SEED_DIR/}"
+        dst="$MODELS_DIR/$rel"
+        size=$(stat -c %s "$src")
+        chunk=$(( (size + CHUNKS - 1) / CHUNKS ))
+        for i in $(seq 0 $((CHUNKS - 1))); do
+          offset=$((i * chunk))
+          [ "$offset" -ge "$size" ] && break
+          length=$chunk
+          [ $((offset + length)) -gt "$size" ] && length=$((size - offset))
+          sem
+          dd if="$src" of="$dst" bs=4M \
+             skip="$offset" seek="$offset" count="$length" \
+             iflag=skip_bytes,count_bytes oflag=seek_bytes \
+             conv=notrunc status=none &
+        done
+      done < "$LARGE_LIST"
+      wait
+
+      # Restore mode + timestamps after all writes complete.
+      while IFS= read -r -d '' src; do
+        rel="${src#$SEED_DIR/}"
+        dst="$MODELS_DIR/$rel"
+        chmod --reference="$src" "$dst" 2>/dev/null || true
+        touch -r "$src" "$dst" 2>/dev/null || true
+      done < "$LARGE_LIST"
+      rm -f "$LARGE_LIST"
+
+      echo "Seed complete in $(($(date +%s) - SEED_START))s: $(du -sh "$MODELS_DIR")"
+    else
+      echo "Skip seed (seed dir missing or models dir non-empty)"
+    fi
+
+    --BOUNDARY--

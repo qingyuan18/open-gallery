@@ -8,17 +8,20 @@ metadata:
 spec:
   scaleTargetRef:
     name: comfyui
-  minReplicaCount: 1
+  # Scale to zero when there's no work. KEDA's activation threshold
+  # (activationTargetMetricValue) controls when 0 → 1 happens; once metric
+  # crosses it, KEDA flips to the regular target-based scaling.
+  minReplicaCount: 0
   maxReplicaCount: 10
-  cooldownPeriod: 180         # seconds to wait before scaling down (GPU nodes are slow to spin up)
-  pollingInterval: 30         # how often KEDA polls CloudWatch (reduced checks ~30-60s)
+  cooldownPeriod: 120         # KEDA waits this long after metric drops before allowing scale-down
+  pollingInterval: 5          # how often KEDA polls CloudWatch
   advanced:
     horizontalPodAutoscalerConfig:
       behavior:
         scaleUp:
-          stabilizationWindowSeconds: 60
+          stabilizationWindowSeconds: 0
         scaleDown:
-          stabilizationWindowSeconds: 300
+          stabilizationWindowSeconds: 180
   triggers:
   - type: aws-cloudwatch
     metadata:
@@ -32,10 +35,10 @@ spec:
       minMetricValue: "0"
       ignoreNullValues: "true"
       metricStat: "Average"
-      metricStatPeriod: "30"
-      metricCollectionTime: "90"
-      metricEndTimeOffset: "30"
-      awsRegion: "${AWS_REGION}"
+      metricStatPeriod: "10"           # high-resolution metric (sidecar publishes StorageResolution=1)
+      metricCollectionTime: "30"       # must be >= 2x metricStatPeriod for reliable data points
+      metricEndTimeOffset: "0"
+      awsRegion: "us-east-1"
     authenticationRef:
       name: comfyui-cw-auth
 

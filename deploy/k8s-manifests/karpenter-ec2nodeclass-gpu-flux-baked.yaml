@@ -1,0 +1,84 @@
+# EC2NodeClass for the "image-baked" variant.
+# Pairs with comfyui-deployment-flux-baked.yaml + the AMI built by
+# build-flux-image-baked-ami.sh.
+#
+# Key difference vs karpenter-ec2nodeclass-gpu.yaml:
+#   * AMI already has comfyui-s3-flux:latest (with Flux models inside the
+#     image) pre-pulled into containerd's k8s.io namespace.
+#   * No /opt/comfyui-models-seed on disk; userData therefore only formats
+#     and mounts the instance-store NVMe (still useful as scratch /
+#     workspace, even though models live in the container image now).
+---
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: gpu
+spec:
+  amiFamily: AL2023
+  # AMI: comfyui-s3-flux image pre-pulled into containerd
+  amiSelectorTerms:
+  - id: ami-05efa58052f4e25fc
+
+  role: "KarpenterNodeRole-hp-eks"
+
+  subnetSelectorTerms:
+  - id: subnet-02a0c90865eb51a75
+
+  securityGroupSelectorTerms:
+  - id: sg-0176fe82167b34c56
+  - id: sg-021ac8869b9cdfce8
+  - id: sg-0ebc984a304afacf4
+
+  # Root snapshot is 130GiB (system + comfyui-s3-flux image cache ~50GiB).
+  blockDeviceMappings:
+  - deviceName: /dev/xvda
+    ebs:
+      volumeSize: 130Gi
+      volumeType: gp3
+      iops: 6000
+      throughput: 500
+      deleteOnTermination: true
+
+  # Mount the instance-store NVMe at /opt/dlami/nvme. No seed copy step —
+  # models are inside the container image now.
+  userData: |
+    MIME-Version: 1.0
+    Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+    --BOUNDARY
+    Content-Type: text/x-shellscript; charset="us-ascii"
+
+    #!/bin/bash
+    set -euxo pipefail
+
+    MOUNT_POINT="/opt/dlami/nvme"
+    mkdir -p "$MOUNT_POINT"
+
+    # Find the first unpartitioned, unmounted NVMe block device.
+    DEV=""
+    for d in /dev/nvme*n1; do
+      [ -b "$d" ] || continue
+      if findmnt -n "$d" >/dev/null 2>&1; then continue; fi
+      if lsblk -nr "$d" | awk 'NR>1 && $6=="part"{found=1} END{exit !found}'; then
+        continue
+      fi
+      DEV="$d"; break
+    done
+
+    if [ -z "$DEV" ]; then
+      echo "No instance-store NVMe detected; pods will run from EBS root only."
+      exit 0
+    fi
+    echo "Using device: $DEV"
+
+    if ! blkid "$DEV" >/dev/null 2>&1; then
+      mkfs.xfs -f "$DEV"
+    fi
+    UUID=$(blkid -s UUID -o value "$DEV")
+    if ! grep -q "$UUID" /etc/fstab; then
+      echo "UUID=$UUID  $MOUNT_POINT  xfs  defaults,nofail,x-systemd.device-timeout=5  0 0" >> /etc/fstab
+    fi
+    mount -a
+    chmod 1777 "$MOUNT_POINT"
+
+    --BOUNDARY--
