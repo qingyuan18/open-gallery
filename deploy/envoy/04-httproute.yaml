@@ -1,0 +1,45 @@
+---
+# ReferenceGrant — allow HTTPRoute in `diffusers-lb` namespace to backendRef
+# the existing Service `diffusers-upscale` in `default` namespace, without
+# touching anything in `default`.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: diffusers-lb-to-default
+  namespace: default
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: diffusers-lb
+  to:
+  - group: ""
+    kind: Service
+    name: diffusers-upscale
+---
+# HTTPRoute — routes inbound HTTP to the existing diffusers-upscale Service.
+# We mirror the actual API surface of the FastAPI server (server.py):
+#   POST /upscale, GET /healthz, GET /queue
+# Single rule with a "/" prefix would also work, but listing them is more explicit.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: diffusers-route
+  namespace: diffusers-lb
+spec:
+  parentRefs:
+  - name: diffusers-gw
+  rules:
+  - matches:
+    - path: { type: PathPrefix, value: / }
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: diffusers-upscale
+      namespace: default
+      port: 8000
+    timeouts:
+      # SD x4 upscaler at 256x256 / 20 steps takes ~5s; allow comfortable headroom
+      # in case multiple requests are queued in Envoy's central queue.
+      request: "180s"
+      backendRequest: "175s"

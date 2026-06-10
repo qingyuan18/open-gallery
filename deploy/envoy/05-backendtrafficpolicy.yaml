@@ -1,0 +1,43 @@
+---
+# BackendTrafficPolicy — the heart of this setup.
+# - LeastRequest: P2C (pick 2 random endpoints, choose the one with fewer in-flight)
+# - circuitBreaker enforces cluster-level concurrency:
+#     maxParallelRequests=10 -> at most 10 requests forwarded to pods at once
+#     maxPendingRequests=10  -> next 10 wait in Envoy's central queue
+#     11+ extra requests get 503 immediately
+# - healthCheck.active probes /healthz so unhealthy pods are removed from rotation
+#   independently of kube-proxy's readiness view.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: diffusers-policy
+  namespace: diffusers-lb
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: diffusers-route
+  loadBalancer:
+    type: LeastRequest
+  circuitBreaker:
+    maxConnections: 1024
+    maxParallelRequests: 10
+    maxPendingRequests: 10
+    maxParallelRetries: 1
+  healthCheck:
+    active:
+      type: HTTP
+      http:
+        path: /healthz
+        method: GET
+        expectedStatuses: [200]
+      interval: "5s"
+      timeout: "2s"
+      unhealthyThreshold: 2
+      healthyThreshold: 1
+  retry:
+    numRetries: 1
+    retryOn:
+      triggers:
+      - reset
+      - connect-failure

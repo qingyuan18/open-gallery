@@ -1,0 +1,51 @@
+---
+# GatewayClass — registers our Gateway with the Envoy Gateway controller.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy-diffusers
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+# Gateway — defines the listener (HTTP :80 inside the data-plane pod).
+# Internal-only test setup: no LoadBalancer, no NLB. Exposed via kubectl port-forward.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: diffusers-gw
+  namespace: diffusers-lb
+spec:
+  gatewayClassName: envoy-diffusers
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: diffusers-proxy
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+---
+# EnvoyProxy — controls how the data-plane pod is provisioned.
+# envoyService.type=ClusterIP: no public LB, only reachable inside the cluster.
+# Use `kubectl port-forward` against the auto-generated svc to test.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: diffusers-proxy
+  namespace: diffusers-lb
+spec:
+  logging:
+    level:
+      default: info
+  telemetry:
+    metrics:
+      prometheus: {}
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: ClusterIP

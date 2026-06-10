@@ -1,0 +1,10 @@
+---
+# Dedicated namespace for the Envoy Gateway data-plane that fronts diffusers-upscale.
+# Keeping it separate from `default` so the whole layer can be deleted in one shot
+# without touching the existing KEDA / Karpenter / Deployment manifests.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: diffusers-lb
+  labels:
+    purpose: diffusers-upscale-load-balancer
