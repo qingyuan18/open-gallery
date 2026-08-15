@@ -361,6 +361,27 @@ define_models() {
     MODEL_URLS+=("https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-4b/resolve/main/split_files/vae/flux2-vae.safetensors")
     LOCAL_PATHS+=("$TEMP_DIR/models/vae/flux2-vae.safetensors")
     S3_PATHS+=("models/vae/flux2-vae.safetensors")
+
+    # MiniMax H3 (video + audio joint generation, requires ComfyUI >= 0.30.0)
+    # UNet: int8 pruned (19.5GB)
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors")
+    S3_PATHS+=("models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors")
+
+    # Text encoder: Qwen3-VL 32B nvfp4 quantized (14.6GB) - bf16 version does not fit 48GB GPUs
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors")
+    S3_PATHS+=("models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors")
+
+    # Video VAE fp16 (4.9GB)
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/vae/minimax_h3_video_vae_fp16.safetensors")
+    S3_PATHS+=("models/vae/minimax_h3_video_vae_fp16.safetensors")
+
+    # Audio VAE fp32 (0.6GB)
+    MODEL_URLS+=("https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors")
+    LOCAL_PATHS+=("$TEMP_DIR/models/vae/minimax_h3_audio_vae_fp32.safetensors")
+    S3_PATHS+=("models/vae/minimax_h3_audio_vae_fp32.safetensors")
 }
 
 # Process all models

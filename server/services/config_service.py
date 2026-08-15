@@ -26,8 +26,8 @@ DEFAULT_PROVIDERS_CONFIG = {
         "models": {
             "flux-kontext": {"type": "comfyui", "media_type": "image"},
             "flux-t2i": {"type": "comfyui", "media_type": "image"},
-            "wan-t2v": {"type": "comfyui", "media_type": "video"},
-            "wan-i2v": {"type": "comfyui", "media_type": "video"}
+            "h3-t2v": {"type": "comfyui", "media_type": "video"},
+            "h3-i2v": {"type": "comfyui", "media_type": "video"}
         },
         "url": "http://ec2-34-216-22-132.us-west-2.compute.amazonaws.com:8188",
         "api_key": ""

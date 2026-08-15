@@ -6,7 +6,7 @@ import json
 
 # Import service modules
 from services.db_service import db_service
-from services.strands_service import strands_agent, strands_multi_agent
+from services.strands_service import strands_agent
 from services.config_service import config_service
 from services.websocket_service import send_to_websocket
 from services.stream_service import add_stream_task, remove_stream_task

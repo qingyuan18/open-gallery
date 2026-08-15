@@ -4,8 +4,8 @@ Strands intention tool (fallback)
 - single_img_edit → flux-kontext
 - multiple_img_edit → qwen-image-multiple
 - text_to_image → flux-t2i
-- text_to_video → wan-t2v
-- image_to_video → wan-i2v
+- text_to_video → h3-t2v
+- image_to_video → h3-i2v
 """
 from typing import Dict, Any
 from strands import tool
@@ -68,13 +68,13 @@ def analyze_edit_intention(
             if available_images >= 1 and ('i2v' in p or '图' in prompt or 'image' in p or 'photo' in p):
                 result.update({
                     "mode": "image_to_video",
-                    "generation_model": "wan-i2v",
+                    "generation_model": "h3-i2v",
                     "reasoning": "检测到视频意图，且存在图像，可走图生视频"
                 })
             else:
                 result.update({
                     "mode": "text_to_video",
-                    "generation_model": "wan-t2v",
+                    "generation_model": "h3-t2v",
                     "reasoning": "检测到视频意图，将进行文本生视频"
                 })
         else:

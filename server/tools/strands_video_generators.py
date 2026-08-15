@@ -50,7 +50,7 @@ def create_generate_video_with_context(session_id: str, canvas_id: str, video_mo
         input_image: Annotated[str, Field(description="Optional image to use as reference for image-to-video generation. Pass image_id here, e.g. 'im_jurheut7.png'. Leave empty for text-to-video generation.")] = "",
         duration: Annotated[int, Field(description="Video duration in seconds (typically 3-10 seconds)")] = 5,
         use_previous_image: Annotated[bool, Field(description="Whether to automatically use the most recent image from the current session as input for image-to-video generation")] = True,
-        model_override: Annotated[str, Field(description="Override model to use for video generation (e.g., 'wan-t2v' or 'wan-i2v'). If set, takes precedence over configured video_model.")] = ""
+        model_override: Annotated[str, Field(description="Override model to use for video generation (e.g., 'h3-t2v' or 'h3-i2v'). If set, takes precedence over configured video_model.")] = ""
     ) -> str:
         """
         Generate a video based on text prompt and optionally an input image.
@@ -77,7 +77,7 @@ def create_generate_video_with_context(session_id: str, canvas_id: str, video_mo
             # 使用提供的上下文信息而不是从contextvars获取
             tool_call_id = generate_file_id()
             
-            model = video_model.get('model', 'wan-t2v')
+            model = video_model.get('model', 'h3-t2v')
             provider = video_model.get('provider', 'comfyui')
 
             # Respect explicit override first
@@ -91,7 +91,7 @@ def create_generate_video_with_context(session_id: str, canvas_id: str, video_mo
                     from services.strands_context import get_intention_result as _get_intent
                     intent = _get_intent()
                     gm = (intent or {}).get('generation_model')
-                    if isinstance(gm, str) and gm.lower().startswith('wan-'):
+                    if isinstance(gm, str) and gm.lower().startswith('h3-'):
                         model = gm
                         print(f"🎯 Using intention generation_model as video model: {model}")
                 except Exception as _e:
@@ -175,14 +175,14 @@ def create_generate_video_with_context(session_id: str, canvas_id: str, video_mo
                 if 't2v' in model.lower():
                     model = model.replace('t2v', 'i2v')
                 elif 'i2v' not in model.lower():
-                    model = 'wan-i2v'  # Default I2V model
+                    model = 'h3-i2v'  # Default I2V model
             else:
                 print("🔍 DEBUG: Using Text-to-Video (T2V) mode")
                 # Force model to T2V if no input image
                 if 'i2v' in model.lower():
                     model = model.replace('i2v', 't2v')
                 elif 't2v' not in model.lower():
-                    model = 'wan-t2v'  # Default T2V model
+                    model = 'h3-t2v'  # Default T2V model
             
             print(f"🔍 DEBUG: Final model: {model}")
 

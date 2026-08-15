@@ -127,6 +127,23 @@ kubectl apply -f k8s-manifests/open-gallery-files-pv-pvc.yaml     # Open Gallery
 kubectl get ingress open-gallery-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' && echo
 ```
 
+## MiniMax H3 视频生成（t2v / i2v）
+
+后台文生视频、图生视频工具默认走 MiniMax H3 工作流（`server/asset/h3_t2v.json` / `h3_i2v.json`，视频+音频联合生成，24fps）。部署要求：
+
+1. **ComfyUI 版本 >= 0.30.0**：H3 节点（`comfy_extras/nodes_minimax_h3.py`）与核心 EasyCache 节点均随 0.30.0 引入。`comfyui-s3.dockerfile` 默认 clone master 并在构建期校验版本与两个组件，缺失会直接构建失败；可用 `--build-arg COMFYUI_VERSION=<tag>` 固定版本。
+2. **模型权重**（约 40GB，`upload-models-to-s3.sh` 已包含，上传后由 prewarm DaemonSet 同步到 NVMe）：
+   - `models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors`（UNet int8，19.5GB）
+   - `models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors`（Qwen3-VL 32B nvfp4 量化，14.6GB；bf16 版 48GB 显卡放不下，必须用量化版）
+   - `models/vae/minimax_h3_video_vae_fp16.safetensors`（4.9GB）
+   - `models/vae/minimax_h3_audio_vae_fp32.safetensors`（0.6GB）
+3. **EasyCache 加速**：两个工作流均内置 EasyCache 节点（reuse_threshold=0.2, start=0.15, end=0.95），5s 视频（length=124，17k+5 帧网格）为默认档位。10s（length=243）显存约 50GB，在 48GB 显卡（L40S）上依赖 ComfyUI offload，会明显变慢，建议默认 5s。
+
+```bash
+# 只补传 H3 模型（跳过已存在的其他模型）
+./scripts/upload-models-to-s3.sh --bucket <your-bucket> --skip-existing --yes
+```
+
 ## 启用 S3 CSI 缓存（emptyDir + metadata-ttl 20s）
 
 说明：已在 `k8s-manifests/s3-pv-pvc.yaml` 与 `k8s-manifests/open-gallery-files-pv-pvc.yaml` 中启用 emptyDir 本地缓存并设置 metadata-ttl 为 20 秒（同时为 emptyDir 设置大小上限）。对已部署与未部署环境均可按以下“删除并重建 PV/PVC”的通用步骤生效：

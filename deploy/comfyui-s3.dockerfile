@@ -29,15 +29,27 @@ ENV PYTHONDONTWRITEBYTECODE=TRUE
 ENV PATH="/opt/program:${PATH}"
 # Compile CUDA extensions for NVIDIA L40S (Ada, SM 8.9) at build time
 # This avoids GPU detection at build and ensures wheels work in k8s pods
-ENV export TORCH_CUDA_ARCH_LIST="8.9"
-ENV export FORCE_CUDA=1
+ENV TORCH_CUDA_ARCH_LIST="8.9"
+ENV FORCE_CUDA=1
 
 ####install ComfyUI
 # Clone ComfyUI from official repository
+# MiniMax H3 nodes (comfy_extras/nodes_minimax_h3.py) and the core EasyCache node
+# require ComfyUI >= 0.30.0. Override COMFYUI_VERSION to pin a specific tag/commit.
+ARG COMFYUI_VERSION=master
 WORKDIR /opt/program
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git /tmp/comfyui && \
+    cd /tmp/comfyui && \
+    git checkout ${COMFYUI_VERSION} && \
     cp -r /tmp/comfyui/* /opt/program/ && \
     rm -rf /tmp/comfyui
+
+# Verify the ComfyUI version ships MiniMax H3 + EasyCache support (fail the build early otherwise)
+RUN test -f /opt/program/comfy_extras/nodes_minimax_h3.py || \
+    (echo "ERROR: comfy_extras/nodes_minimax_h3.py missing - ComfyUI ${COMFYUI_VERSION} is older than 0.30.0" && exit 1)
+RUN python -c "import re,sys; v=re.search(r'__version__\s*=\s*\"([^\"]+)\"', open('/opt/program/comfyui_version.py').read()).group(1); parts=tuple(int(x) for x in v.split('.')[:2]); sys.exit(0 if parts >= (0,30) else ('ComfyUI %s < 0.30.0, MiniMax H3 unsupported' % v))"
+RUN grep -rq "EasyCache" /opt/program/comfy_extras/ || \
+    (echo "ERROR: core EasyCache node missing from comfy_extras" && exit 1)
 
 RUN pip install -r /opt/program/requirements.txt
 
@@ -77,12 +89,6 @@ RUN git clone https://github.com/WASasquatch/was-node-suite-comfyui /opt/program
 
 # Tooling Nodes
 RUN git clone https://github.com/Acly/comfyui-tooling-nodes.git /opt/program/custom_nodes/comfyui-tooling-nodes
-
-### Video Generation Nodes ###
-# Wan Video Wrapper
-RUN git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git /opt/program/custom_nodes/ComfyUI-WanVideoWrapper && \
-    cd /opt/program/custom_nodes/ComfyUI-WanVideoWrapper && \
-    pip install -r requirements.txt
 
 ### Image Editing Nodes ###
 # Qwen Edit Utils
