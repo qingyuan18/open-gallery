@@ -1,13 +1,12 @@
 """
 Strands Agent Service
-统一的 AWS Strands Agent 服务，支持单agent和多agent模式
+统一的 AWS Strands Agent 服务（单 agent + tools 模式）
 """
-import asyncio
 import json
 import traceback
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 
-from strands import Agent, tool
+from strands import Agent
 try:
     from strands.models import BedrockModel
     from strands.models.openai import OpenAIModel
@@ -34,7 +33,6 @@ from services.config_service import config_service
 from services.websocket_service import send_to_websocket, send_to_user_websocket
 from services.strands_context import SessionContextManager, set_intention_result
 from services.user_context import get_current_user_id
-from pydantic import Field
 
 from tools.strands_intention import analyze_edit_intention
 
@@ -94,64 +92,14 @@ async def send_user_websocket_message(session_id: str, event: dict):
         await send_to_websocket(session_id, event)
 
 
-async def handle_image_generation_result(tool_result_text: str, session_id: str, tool_call_id: str):
-    """处理图像生成工具的结果，如果检测到图像生成成功，则保存图像消息"""
-    try:
-        print(f"🔍 DEBUG: Checking tool result text: {tool_result_text[:200]}...")
-
-        # 检查是否是图像生成成功的消息
-        if "Image generated successfully!" in tool_result_text and "File ID:" in tool_result_text:
-            print(f"🎨 DEBUG: Found image generation success message")
-
-            # 提取文件ID
-            import re
-            file_id_match = re.search(r'File ID: ([^,\s]+)', tool_result_text)
-            print(f"🔍 DEBUG: Regex match result: {file_id_match}")
-
-            if file_id_match:
-                file_id = file_id_match.group(1)
-                print(f"🎨 DEBUG: Detected image generation result, file_id: {file_id}")
-
-                # 创建图像消息格式
-                image_message = {
-                    'role': 'assistant',
-                    'content': [
-                        {
-                            'type': 'image_url',
-                            'image_url': {
-                                'url': f'/api/file/{file_id}'
-                            }
-                        }
-                    ]
-                }
-
-                # 保存图像消息到数据库
-                try:
-                    db_service.create_message(session_id, 'assistant', json.dumps(image_message))
-                    print(f"✅ Saved image message for file_id: {file_id}")
-                except Exception as save_error:
-                    print(f"❌ ERROR: Failed to save image message: {save_error}")
-                    traceback.print_exc()
-            else:
-                print(f"❌ DEBUG: Failed to extract file_id from: {tool_result_text}")
-        # 检查是否是视频生成成功的消息
-        elif "Video generated successfully!" in tool_result_text and "File ID:" in tool_result_text:
-            # 提取文件ID
-            import re
-            file_id_match = re.search(r'File ID: `([^`]+)`', tool_result_text)
-            if file_id_match:
-                file_id = file_id_match.group(1)
-                print(f"🎬 DEBUG: Detected video generation result, file_id: {file_id}")
-
-                # 对于视频，我们保存包含下载链接的文本消息（因为前端还没有专门的视频消息组件）
-                # 这里我们不需要额外保存，因为工具返回的文本消息已经包含了下载链接
-                print(f"✅ Video message will be saved as text with download link")
-
-    except Exception as e:
-        print(f"⚠️ Error handling generation result: {e}")
-        # 不抛出异常，避免影响主流程
-
-
+def _extract_tool_result_texts(tool_result) -> list:
+    """从 toolResult 结构中提取所有文本内容"""
+    texts = []
+    if isinstance(tool_result, dict) and 'content' in tool_result:
+        for content in tool_result['content']:
+            if isinstance(content, dict) and content.get('type') == 'text' and 'text' in content:
+                texts.append(content['text'])
+    return texts
 
 
 def _extract_first_json_object(text: str):
@@ -261,31 +209,9 @@ async def strands_agent(messages, canvas_id, session_id, text_model, image_model
     try:
         model = create_model_instance(text_model)
 
-        # 创建系统提示
-        # Detect availability of use_agent tool early to shape prompt and tool list
-        has_use_agent = False
-        use_agent_tool = None
-        try:
-            from strands_tools import use_agent as _use_agent
-            use_agent_tool = _use_agent
-            has_use_agent = True
-            print("✅ use_agent available; will prefer it for intent classification")
-        except Exception as e:
-            print(f"⚠️ use_agent not available, will use analyze_edit_intention as fallback: {e}")
-
         available_tools = []
 
-        # 检查是否使用 ComfyUI 模型
-        is_comfyui_model = (
-            image_model.get('provider') == 'comfyui' or
-            (video_model and video_model.get('provider') == 'comfyui')
-        )
-
-        print(f"🔍 DEBUG: is_comfyui_model = {is_comfyui_model}")
-        print(f"🔍 DEBUG: image_model.provider = {image_model.get('provider')}")
-        print(f"🔍 DEBUG: video_model = {video_model}")
-        if video_model:
-            print(f"🔍 DEBUG: video_model.provider = {video_model.get('provider')}")
+        print(f"🔍 DEBUG: image_model={image_model}, video_model={video_model}")
 
         # Always expose contextual tools directly
         available_tools.append("generate_image_with_context: Generate images based on text descriptions")
@@ -313,22 +239,6 @@ When users request image or video generation:
    - h3-t2v (text-to-video)
    - h3-i2v (image-to-video)
    Important: Explicitly pass model_override=generation_model for precision and traceability.
-
-Intent classification (reference only):
-Below is the STRICT JSON template the child agent uses when classifying intent (for your awareness; you should not re-run it):
-
-- You are an intent classifier for image editing requests.
-- Output STRICT JSON only, no extra text.
-- Fields:
-  - mode: "single_img_edit" | "multiple_img_edit" | "text_to_image" | "text_to_video" | "image_to_video"
-  - generation_model: one of "flux-kontext", "qwen-image-multiple", "flux-t2i", "h3-t2v", "h3-i2v"
-  - reasoning: short Chinese explanation
-- Rules:
-  - Analyze ONLY the user's intent from their request text, ignore whether images are already uploaded
-  - If user wants to edit/modify/add elements to an existing image → output "single"
-  - If user explicitly wants to merge/combine/blend/fuse multiple images → output "multiple"
-  - If user wants to create completely new content without referencing existing images → output "text_only"
-- Return ONLY JSON, with no leading/trailing commentary.
 """
         else:
             intent_guidance = """
@@ -489,11 +399,11 @@ Be helpful, accurate, and creative in your responses.
 
             # 创建带有上下文信息的工具
             tools = []
-            # Run child intent agent BEFORE building main tools: isolate use_agent and store result in session context
+            # Run child intent agent BEFORE building main tools and store result in session context
             # 只有在开启自动模型选择时才执行意图识别
             try:
                 intent_set = False
-                if auto_model_selection and has_use_agent and use_agent_tool:
+                if auto_model_selection:
                     child_system_prompt = (
                         "You are an intent classifier for image/video editing and generation.\n"
                         "Output STRICT JSON only, no extra text.\n"
@@ -503,7 +413,7 @@ Be helpful, accurate, and creative in your responses.
                         "  - input_image_num: integer (only when mode=multiple_img_edit). Decide from the user's text if they ask for 2 or 3 images; default to 2.\n"
                         "  - reasoning: short Chinese explanation\n"
                         "Rules:\n"
-                        "  - Analyze ONLY the user's current request text (no tool usage besides use_agent).\n"
+                        "  - Analyze ONLY the user's current request text (no tool usage).\n"
                         "  - For VIDEO generation requests:\n"
                         "    * If user explicitly mentions using/editing/based on an existing image/photo (keywords: '图', '照片', 'image', 'photo', 'picture', 'i2v', '基于', '根据'), choose mode=\"image_to_video\" and generation_model=\"h3-i2v\"\n"
                         "    * Otherwise, for pure text-to-video requests (keywords: '生成视频', '创建视频', 'generate video', 'create video', 't2v'), choose mode=\"text_to_video\" and generation_model=\"h3-t2v\"\n"
@@ -534,7 +444,7 @@ Be helpful, accurate, and creative in your responses.
 
                     child_agent = Agent(
                         model=child_model,
-                        tools=[],  # no tools to avoid recursive use_agent calls
+                        tools=[],  # 意图分类不需要工具
                         system_prompt=child_system_prompt
                     )
 
@@ -563,12 +473,12 @@ Be helpful, accurate, and creative in your responses.
                     if isinstance(parsed_result, dict):
                         set_intention_result(parsed_result)
                         mode = parsed_result.get('mode'); gm = parsed_result.get('generation_model')
-                        print(f"🧭 [child] use_agent parsed → mode={mode}, generation_model={gm}")
+                        print(f"🧭 [child] intent agent parsed → mode={mode}, generation_model={gm}")
                         intent_set = True
                     else:
-                        print("⚠️ [child] use_agent did not produce parsable JSON; will fallback to keyword intention tool")
+                        print("⚠️ [child] intent agent did not produce parsable JSON; will fallback to keyword intention tool")
 
-                # Fallback to local keyword tool if needed or if use_agent unavailable
+                # Fallback to local keyword tool if the child agent produced nothing usable
                 if auto_model_selection and not intent_set:
                     try:
                         kw = analyze_edit_intention(prompt=user_prompt)
@@ -658,29 +568,19 @@ Be helpful, accurate, and creative in your responses.
                         if 'text' in delta:
                             response_parts.append(delta['text'])
 
-                    # 收集工具调用结果
+                    # 收集工具调用结果（工具已直接保存图像/视频消息，这里只收集文本用于回复消息）
                     if isinstance(event, dict) and 'toolResult' in event:
-                        tool_result = event['toolResult']
-                        if 'content' in tool_result:
-                            for content in tool_result['content']:
-                                if content.get('type') == 'text' and 'text' in content:
-                                    tool_results.append(content['text'])
-                                    print(f"🔍 DEBUG: Collected tool result: {content['text'][:100]}...")
-
-                                    # 工具已经直接保存了图像/视频消息，这里不需要额外处理
-
-                        # 兼容另一种事件形态：toolResult 位于顶层 message.content[*].toolResult
-                        if isinstance(event, dict) and isinstance(event.get('message'), dict):
-                            msg = event['message']
-                            contents = msg.get('content') if isinstance(msg.get('content'), list) else []
-                            for item in contents:
-                                if isinstance(item, dict) and 'toolResult' in item:
-                                    tr = item['toolResult']
-                                    if isinstance(tr, dict) and 'content' in tr:
-                                        for c in tr['content']:
-                                            if c.get('type') == 'text' and 'text' in c:
-                                                tool_results.append(c['text'])
-                                                print(f"🔍 DEBUG: Collected tool result (message envelope): {c['text'][:100]}...")
+                        for text in _extract_tool_result_texts(event['toolResult']):
+                            tool_results.append(text)
+                            print(f"🔍 DEBUG: Collected tool result: {text[:100]}...")
+                    # 兼容另一种事件形态：toolResult 位于顶层 message.content[*].toolResult
+                    elif isinstance(event, dict) and isinstance(event.get('message'), dict):
+                        contents = event['message'].get('content')
+                        for item in (contents if isinstance(contents, list) else []):
+                            if isinstance(item, dict) and 'toolResult' in item:
+                                for text in _extract_tool_result_texts(item['toolResult']):
+                                    tool_results.append(text)
+                                    print(f"🔍 DEBUG: Collected tool result (message envelope): {text[:100]}...")
 
 
                 # 保存完整的文本消息到数据库（包括工具结果）
@@ -701,10 +601,7 @@ Be helpful, accurate, and creative in your responses.
                     'error': str(e)
                 })
 
-        # 发送完成事件
-        await send_user_websocket_message(session_id, {
-            'type': 'done'
-        })
+        # 'done' 事件由 chat_service 在任务结束时统一发送
 
     except Exception as e:
         print('Error in strands_agent', e)
@@ -809,97 +706,28 @@ async def handle_agent_event(event, session_id):
                 tool_name = _tool_call_names.get(tool_use_id, tool_use.get('name', ''))
                 print(f"🔧 Tool call completed: {tool_use_id} ({tool_name})")
 
-    # 处理工具调用结果
+    # 处理工具调用结果（顶层 toolResult 或 message.content[*].toolResult 两种事件形态之一）
     if 'toolResult' in event:
-        tool_result = event['toolResult']
-        tool_use_id = tool_result.get('toolUseId', 'unknown')
-
-        tool_name = _tool_call_names.get(tool_use_id, '')
-        print(f"🔧 Tool result received: {tool_use_id} ({tool_name})")
-
-        # 发送工具结果到前端（如果需要），并增强日志（尤其是 use_agent）
-        if 'content' in tool_result:
-            for content in tool_result['content']:
-                if content.get('type') == 'text' and 'text' in content:
-                    text = content['text']
-                    # 特殊处理 use_agent：打印完整返回并尝试解析 JSON
-                    if 'use_agent' in (tool_name or ''):
-                        print(f"🧭 use_agent raw result: {text}")
-                        try:
-                            parsed = json.loads(text)
-                            mode = parsed.get('mode')
-                            generation_model = parsed.get('generation_model')
-                            reasoning = parsed.get('reasoning')
-                            print(f"🧭 use_agent parsed → mode={mode}, generation_model={generation_model}, reasoning={reasoning}")
-                            # Store into session context for tool fallback consumption
-                            try:
-                                set_intention_result(parsed)
-                            except Exception as _se:
-                                print(f"⚠️ Failed to store intention result in session context: {_se}")
-                        except Exception:
-                            # 非严格 JSON 时忽略解析失败
-                            pass
-                    else:
-                        # 其他工具的结果做简略日志
-                        print(f"🔍 DEBUG: Tool ({tool_name}) result: {text[:200]}...")
-
-                    # 向前端发送工具结果作为 delta
-                    await send_user_websocket_message(session_id, {
-                        'type': 'delta',
-                        'text': text
-                    })
-
-    # 注释掉重复的文本处理逻辑，避免重复发送delta事件
-
-    # 兼容：toolResult 位于顶层 message.content[*].toolResult（与上面的顶层 toolResult 平行）
-    if isinstance(event.get('message'), dict):
-        msg = event['message']
-        contents = msg.get('content') if isinstance(msg.get('content'), list) else []
-        for item in contents:
+        await _forward_tool_result(event['toolResult'], session_id)
+    elif isinstance(event.get('message'), dict):
+        contents = event['message'].get('content')
+        for item in (contents if isinstance(contents, list) else []):
             if isinstance(item, dict) and 'toolResult' in item:
-                tool_result = item['toolResult']
-                if not isinstance(tool_result, dict):
-                    continue
-                tool_use_id = tool_result.get('toolUseId', 'unknown')
-                tool_name = _tool_call_names.get(tool_use_id, '')
-                print(f"🔧 Tool result received: {tool_use_id} ({tool_name}) [message envelope]")
-
-                if 'content' in tool_result:
-                    for content in tool_result['content']:
-                        if content.get('type') == 'text' and 'text' in content:
-                            text = content['text']
-                            if 'use_agent' in (tool_name or ''):
-                                print(f"🧭 use_agent raw result: {text}")
-                                try:
-                                    parsed = json.loads(text)
-                                    mode = parsed.get('mode')
-                                    generation_model = parsed.get('generation_model')
-                                    reasoning = parsed.get('reasoning')
-                                    print(f"🧭 use_agent parsed → mode={mode}, generation_model={generation_model}, reasoning={reasoning}")
-                                    # Store into session context for tool fallback consumption
-                                    try:
-                                        set_intention_result(parsed)
-                                    except Exception as _se:
-                                        print(f"⚠️ Failed to store intention result in session context: {_se}")
-                                except Exception:
-                                    pass
-                            else:
-                                print(f"🔍 DEBUG: Tool ({tool_name}) result: {text[:200]}...")
-
-                            await send_user_websocket_message(session_id, {
-                                'type': 'delta',
-                                'text': text
-                            })
-
-    # elif "data" in event and "delta" in event:
-    #     # 处理包含文本的数据事件，但避免重复处理已经在上面处理过的事件
-    #     if isinstance(event.get("data"), str) and event["data"].strip():
-    #         # 这是一个包含文本的数据事件
-    #         await send_user_websocket_message(session_id, {
-    #             'type': 'delta',
-    #             'text': event["data"]
-    #         })
+                await _forward_tool_result(item['toolResult'], session_id, source='message envelope')
 
 
-# 向后兼容的别名
-clean_strands_agent = strands_agent
+async def _forward_tool_result(tool_result, session_id: str, source: str = ''):
+    """将工具结果文本作为 delta 转发到前端"""
+    if not isinstance(tool_result, dict):
+        return
+    tool_use_id = tool_result.get('toolUseId', 'unknown')
+    tool_name = _tool_call_names.get(tool_use_id, '')
+    suffix = f" [{source}]" if source else ''
+    print(f"🔧 Tool result received: {tool_use_id} ({tool_name}){suffix}")
+
+    for text in _extract_tool_result_texts(tool_result):
+        print(f"🔍 DEBUG: Tool ({tool_name}) result: {text[:200]}...")
+        await send_user_websocket_message(session_id, {
+            'type': 'delta',
+            'text': text
+        })
